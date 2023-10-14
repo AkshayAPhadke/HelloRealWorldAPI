@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.5.33627.172
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HelloRealWorldAPI", "HelloRealWorldAPI\HelloRealWorldAPI.csproj", "{0806E147-17F8-4A83-9621-AB1D84A47071}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{0806E147-17F8-4A83-9621-AB1D84A47071}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0806E147-17F8-4A83-9621-AB1D84A47071}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0806E147-17F8-4A83-9621-AB1D84A47071}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0806E147-17F8-4A83-9621-AB1D84A47071}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {93045167-42DA-4121-9618-D617E3AEA77B}
+	EndGlobalSection
+EndGlobal
