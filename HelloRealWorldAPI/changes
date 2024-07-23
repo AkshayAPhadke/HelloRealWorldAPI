@@ -1,0 +1,1340 @@
+ public async Task ProcessInstaBillPayment(BillerRecord BR, StringBuilder log)
+        {
+            log.Append(Environment.NewLine + "ProcessInstaBillPayment Started" + Environment.NewLine);
+
+            #region objectIntialize
+            PayRequestJupiter PRJ = new PayRequestJupiter();
+            PayRequestIndoStar PRIndoStar = new PayRequestIndoStar();
+            PayRequestIndoStarIhfl PRIndoStarIHFL = new PayRequestIndoStarIhfl();
+            PayRequestNasDigital PRNASDigital = new PayRequestNasDigital();
+            PayRequestNupayCriss PRNupayCriss = new PayRequestNupayCriss();
+
+            PayRequest PR = new PayRequest();
+            PayRequestVastu PRV = new PayRequestVastu();
+            ConfirmationRequestBfil PRC = new ConfirmationRequestBfil();
+            PayRequestSvatantra PRS = new PayRequestSvatantra();
+            PayRequestCfd PRCFD = new PayRequestCfd();
+            PayRequestIndiaShelter PRIS = new PayRequestIndiaShelter();
+            PayRequestHdbf PRHDBF = new PayRequestHdbf();
+            PayRequestBhfl PRBHFL = new PayRequestBhfl();
+            PayRequestSatin PRSATIN = new PayRequestSatin();
+            PayRequestAbfl PABFL = new PayRequestAbfl();
+            PayRequestBelStar PRBEL = new PayRequestBelStar();
+            PayRequestShimla PRSHIMLA = new PayRequestShimla();
+            PayRequestBpcl PRBPCL = new PayRequestBpcl();
+            PayRequestFiveStar PRFiveStr = new PayRequestFiveStar();
+            #endregion
+
+            string BillerId = string.Empty,
+                               Address = string.Empty,
+                               ContentType = string.Empty,
+                               RefId = string.Empty,
+                               Body = string.Empty,
+                               AuthenticationMode = string.Empty,
+                               AggregatorModel = string.Empty,
+                               AggregatorID = string.Empty,
+                               AggregatorName = string.Empty;
+
+            log.Append("Bill Pay Utility invoked" + Environment.NewLine);
+            DataSet dsResult;
+            string encryptedRequestbody = string.Empty;
+            string Requestbody = string.Empty;
+            string xmldata = "";
+            string _formdatasb = "";
+            Dictionary<string, Dictionary<string, object>> input = null;
+            Dictionary<string, object> output = new Dictionary<string, object>();
+            input = new Dictionary<string, Dictionary<string, object>>
+                                {
+                                   {
+                                        "BillerParam", new Dictionary<string, object>()
+                                    }
+                                 };
+
+
+            BillerId = BR.BillerId;
+            Address = BR.Address;
+            Body = BR.Body;
+            RefId = BR.RefId;
+            AggregatorModel = BR.AggregatorModel;
+            AggregatorID = BR.AggregatorID;
+            AggregatorName = BR.AggregatorName;
+
+            log.Append($"GET {BillerId} Request : " + Environment.NewLine
+                                                                                 + "AggregatorModel: " + AggregatorModel + Environment.NewLine
+                                                                                 + "AggregatorID: " + AggregatorID + Environment.NewLine
+                                                                                 + "AggregatorName: " + AggregatorName + Environment.NewLine
+                                                                                 + Environment.NewLine);
+
+            foreach (XElement Biller in XElement.Load(ConfigXML).Elements("Billers").Where(k => k.FirstAttribute.Value == BillerId))
+            {
+
+                foreach (XElement Element in Biller.Elements("Biller"))
+                {
+                    input["BillerParam"].Add(Convert.ToString(Element.FirstAttribute.Name), Element.FirstAttribute.Value);
+                }
+            }
+            input["BillerParam"].Add("Body", Body);
+            input["BillerParam"].Add("BillerId", BillerId);
+            AuthenticationMode = Convert.ToString(input["BillerParam"]["AuthenticationMode"]).ToUpper();
+
+            if (AggregatorModel == "1" && AuthenticationMode.ToLower() == "aggregator")  //Check for aggregation
+            {
+                input.Add("RequestHeaders", new Dictionary<string, object>());
+
+
+                dsResult = dbService.GetRequestParams(RefId);
+
+                Dictionary<string, string> ReqParam;
+                string xmlobjDsResult = dsResult.GetXml();
+
+                ReqParam = HelperAggregator.AddRequestParamAggregator(xmlobjDsResult, Address, BillerId, out xmldata, log, AggregatorID, AggregatorName);
+
+                input["BillerParam"].Add("Address", ReqParam["BillerBillFetchURL"]);
+                if (Convert.ToString(input["BillerParam"]["ContentType"]) == "application/json")
+                {
+                    DataSet ds = new DataSet();
+                    using (StringReader sr = new StringReader(xmldata))
+                    {
+                        log.Append("xmldata " + xmldata + Environment.NewLine);
+                        ds.ReadXml(sr);
+                        if (ds != null && ds?.Tables.Count > 0 && ds?.Tables[0].Rows.Count > 0)
+                        {
+                            input["BillerParam"]["RefId"] = Convert.ToString(ds.Tables[0].Rows[0]["ORDERID"]);
+                            if (AggregatorName == "JupiterOrison")
+                            {
+                                log.Append("-------------------------------------------------------------------------------" + Environment.NewLine);
+
+                                string TxnRefID = Convert.ToString(ds.Tables[0].Rows[0]["TxnRefID"]);
+                                string RefID = Convert.ToString(ds.Tables[0].Rows[0]["RefID"]);
+                                string StudendtID = Convert.ToString(ds.Tables[0].Rows[0]["StudendtID"]);
+                                string BillAmount = Convert.ToString(ds.Tables[0].Rows[0]["BillAmount"]);
+                                string PayReceive = Convert.ToString(ds.Tables[0].Rows[0]["PayReceive"]);
+                                string BlrId = Convert.ToString(ds.Tables[0].Rows[0]["BillerId"]);
+                                string PaymentMode = Convert.ToString(ds.Tables[0].Rows[0]["PaymentMode"]);
+
+
+                                log.Append("GET CollectionConfirmation JupiterOrison Request : " + Environment.NewLine
+                                                                                        + "TxnRefID: " + TxnRefID + Environment.NewLine
+                                                                                        + "RefID: " + RefID + Environment.NewLine
+                                                                                        + "StudendtID: " + StudendtID + Environment.NewLine
+                                                                                        + "BillAmount: " + BillAmount + Environment.NewLine
+                                                                                        + "PayReceive: " + PayReceive + Environment.NewLine
+                                                                                        + "BillerId: " + BlrId + Environment.NewLine
+                                                                                        + "PaymentMode: " + PaymentMode + Environment.NewLine
+                                                                                        + Environment.NewLine);
+
+                                PRJ.TxnRefID = TxnRefID;
+                                PRJ.RefID = RefID;
+                                PRJ.StudendtID = StudendtID;
+                                PRJ.BillAmount = BillAmount;
+                                PRJ.PayReceive = PayReceive;
+                                PRJ.BillerId = BlrId;
+                                PRJ.PaymentMode = PaymentMode;
+
+                            }
+
+                            else if (AggregatorName.ToLower() == "indostar")
+                            {
+                                log.Append("-------------------------IndoStar Pay------------------------------------------------------" + Environment.NewLine);
+
+
+                                string PaymentStatus = Convert.ToString(ds.Tables[0].Rows[0]["PaymentStatus"]);
+                                string LoanNumber = Convert.ToString(ds.Tables[0].Rows[0]["LoanNumber"]);
+                                string AmountPaid = Convert.ToString(ds.Tables[0].Rows[0]["AmountPaid"]);
+                                string TransactionDate = Convert.ToString(ds.Tables[0].Rows[0]["TransactionDate"]);
+                                string TransactionNo1 = Convert.ToString(ds.Tables[0].Rows[0]["TransactionNo1"]);
+                                string TransactionNo2 = Convert.ToString(ds.Tables[0].Rows[0]["TransactionNo2"]);
+                                string FetchReferenceID = Convert.ToString(ds.Tables[0].Rows[0]["FetchReferenceID"]);
+
+
+
+                                log.Append("GET CollectionConfirmation IndoStar Request : " + Environment.NewLine
+                                                                                        + "PaymentStatus: " + PaymentStatus + Environment.NewLine
+                                                                                        + "LoanNumber: " + LoanNumber + Environment.NewLine
+                                                                                        + "AmountPaid: " + AmountPaid + Environment.NewLine
+                                                                                        + "TransactionDate: " + TransactionDate + Environment.NewLine
+                                                                                        + "TransactionNo1: " + TransactionNo1 + Environment.NewLine
+                                                                                        + "TransactionNo2: " + TransactionNo2 + Environment.NewLine
+                                                                                        + "FetchReferenceID: " + FetchReferenceID + Environment.NewLine
+                                                                                        + Environment.NewLine);
+
+                                PRIndoStar.PaymentStatus = PaymentStatus;
+                                PRIndoStar.LoanNumber = LoanNumber;
+                                PRIndoStar.AmountPaid = AmountPaid;
+                                PRIndoStar.TransactionDate = TransactionDate;
+                                PRIndoStar.TransactionNo1 = TransactionNo1;
+                                PRIndoStar.TransactionNo2 = TransactionNo2;
+                                PRIndoStar.FetchReferenceID = FetchReferenceID;
+                            }
+                            else if (AggregatorName.ToLower() == "indostarihfl")   //IndoStarihfl
+                            {
+                                log.Append("-------------------------IndoStarIHFL Pay------------------------------------------------------" + Environment.NewLine);
+                                string userId = Convert.ToString(ds.Tables[0].Rows[0]["userId"]);
+                                string userPassword = Convert.ToString(ds.Tables[0].Rows[0]["userPassword"]);
+                                string source = Convert.ToString(ds.Tables[0].Rows[0]["source"]);
+                                string loanNo = Convert.ToString(ds.Tables[0].Rows[0]["loanNo"]);
+                                string receiptAmount = Convert.ToString(ds.Tables[0].Rows[0]["receiptAmount"]);
+                                string receiptDateTime = Convert.ToString(ds.Tables[0].Rows[0]["receiptDateTime"]);
+                                string requestRefId = Convert.ToString(ds.Tables[0].Rows[0]["requestRefId"]);
+                                string transactionNpci = Convert.ToString(ds.Tables[0].Rows[0]["transactionNpci"]);
+                                string transactionIbl = Convert.ToString(ds.Tables[0].Rows[0]["transactionIbl"]);
+
+
+                                log.Append("GET CollectionConfirmation IndoStarIHFL Request : " + Environment.NewLine
+                                                                                        + "userId: " + userId + Environment.NewLine
+                                                                                        + "userPassword: " + userPassword + Environment.NewLine
+                                                                                        + "source: " + source + Environment.NewLine
+                                                                                        + "loanNo: " + loanNo + Environment.NewLine
+                                                                                        + "receiptAmount: " + receiptAmount + Environment.NewLine
+                                                                                        + "receiptDateTime: " + receiptDateTime + Environment.NewLine
+                                                                                        + "requestRefId: " + requestRefId + Environment.NewLine
+                                                                                        + "transactionNpci: " + transactionNpci + Environment.NewLine
+                                                                                        + "transactionIbl: " + transactionIbl + Environment.NewLine
+                                                                                        + Environment.NewLine);
+
+
+                                UserCredentials PRICredentialsIHFL = new UserCredentials();
+                                PRICredentialsIHFL.userId = userId;
+                                PRICredentialsIHFL.userPassword = userPassword;
+                                PRICredentialsIHFL.source = source;
+
+                                PRIndoStarIHFL.userCredentials = PRICredentialsIHFL;
+                                PRIndoStarIHFL.loanNo = loanNo;
+                                PRIndoStarIHFL.receiptAmount = receiptAmount;
+                                PRIndoStarIHFL.receiptDateTime = receiptDateTime;
+                                PRIndoStarIHFL.requestRefId = requestRefId;
+                                PRIndoStarIHFL.transactionNpci = transactionNpci;
+                                PRIndoStarIHFL.transactionIbl = transactionIbl;
+                            }
+                            else if (AggregatorName.ToLower() == "nasdigital")
+                            {
+                                log.Append("-------------------------------------------------------------------------------" + Environment.NewLine);
+
+                                string loan_number_id = Convert.ToString(ds.Tables[0].Rows[0]["loan_number_id"]);
+                                string utr_number = Convert.ToString(ds.Tables[0].Rows[0]["utr_number"]);
+                                string payment_mode_ref_id = Convert.ToString(ds.Tables[0].Rows[0]["payment_mode_ref_id"]);
+                                string payment_channel = Convert.ToString(ds.Tables[0].Rows[0]["payment_channel"]);
+                                string payment_amount = Convert.ToString(ds.Tables[0].Rows[0]["payment_amount"]);
+                                string record_id = Convert.ToString(ds.Tables[0].Rows[0]["record_id"]);
+                                string transaction_type = Convert.ToString(ds.Tables[0].Rows[0]["transaction_type"]);
+                                string ORDERID = Convert.ToString(ds.Tables[0].Rows[0]["ORDERID"]);
+
+                                log.Append("GET CollectionConfirmation NASDigital Request : " + Environment.NewLine
+                                                                                        + "loan_number_id: " + loan_number_id + Environment.NewLine
+                                                                                        + "utr_number: " + utr_number + Environment.NewLine
+                                                                                        + "payment_mode_ref_id: " + payment_mode_ref_id + Environment.NewLine
+                                                                                        + "payment_channel: " + payment_channel + Environment.NewLine
+                                                                                        + "payment_amount: " + payment_amount + Environment.NewLine
+                                                                                        + "record_id: " + record_id + Environment.NewLine
+                                                                                        + "transaction_type: " + transaction_type + Environment.NewLine
+                                                                                        + "ORDERID: " + ORDERID + Environment.NewLine
+                                                                                        + Environment.NewLine);
+
+                                PRNASDigital.loan_number_id = loan_number_id;
+                                PRNASDigital.utr_number = utr_number;
+                                PRNASDigital.payment_mode_ref_id = payment_mode_ref_id;
+                                PRNASDigital.payment_channel = payment_channel;
+                                PRNASDigital.payment_amount = payment_amount;
+                                PRNASDigital.record_id = record_id;
+                                PRNASDigital.transaction_type = transaction_type;
+                                PRNASDigital.ORDERID = ORDERID;
+
+                            }
+                            else if (AggregatorName.ToLower() == "nupay")   //IndoStarihfl
+                            {
+                                log.Append("-------------------------Nupay Criss Pay------------------------------------------------------" + Environment.NewLine);
+
+                                string attributeName = Convert.ToString(ds.Tables[0].Rows[0]["attributeName"]);
+                                string attributeValue = Convert.ToString(ds.Tables[0].Rows[0]["attributeValue"]);
+                                string paymentMode = Convert.ToString(ds.Tables[0].Rows[0]["paymentMode"]);
+                                string txnReferenceId = Convert.ToString(ds.Tables[0].Rows[0]["txnReferenceId"]);
+                                DateTime ts = Convert.ToDateTime(ds.Tables[0].Rows[0]["ts"]);
+                                string billertxnReferenceId = Convert.ToString(ds.Tables[0].Rows[0]["billertxnReferenceId"]);
+                                string amount = Convert.ToString(ds.Tables[0].Rows[0]["amount"]);
+
+
+
+                                log.Append("GET CollectionConfirmation NupayCriss Request : " + Environment.NewLine
+                                                                                        + "attributeName: " + attributeName + Environment.NewLine
+                                                                                        + "attributeValue: " + attributeValue + Environment.NewLine
+                                                                                        + "paymentMode: " + paymentMode + Environment.NewLine
+                                                                                        + "txnReferenceId: " + txnReferenceId + Environment.NewLine
+                                                                                        + "ts: " + ts + Environment.NewLine
+                                                                                        + "billertxnReferenceId: " + billertxnReferenceId + Environment.NewLine
+                                                                                        + "amount: " + amount + Environment.NewLine
+                                                                                        + Environment.NewLine);
+
+
+
+
+                                List<Customerbillerid> NupayCrissCustomerList = new List<Customerbillerid>();
+                                Customerbillerid cbi = new Customerbillerid();
+                                cbi.attributeName = attributeName;
+                                cbi.attributeValue = attributeValue;
+                                NupayCrissCustomerList.Add(cbi);
+
+
+                                PRNupayCriss.customerbillerid = NupayCrissCustomerList;
+                                PRNupayCriss.paymentMode = paymentMode;
+                                PRNupayCriss.txnReferenceId = txnReferenceId;
+                                PRNupayCriss.ts = ts;
+                                PRNupayCriss.billertxnReferenceId = billertxnReferenceId;
+                                PRNupayCriss.amount = amount;
+
+                            }
+                            else
+                            {
+                                ds.Tables[0].Columns.Remove("ORDERID");
+                            }
+
+                            if (AggregatorName == "JupiterOrison")
+                            {
+                                Requestbody = JsonConvert.SerializeObject(PRJ);
+                            }
+                            else if (AggregatorName.ToLower() == "indostar")
+                            {
+                                Requestbody = JsonConvert.SerializeObject(PRIndoStar);
+                            }
+                            else if (AggregatorName.ToLower() == "indostarihfl")
+                            {
+                                Requestbody = JsonConvert.SerializeObject(PRIndoStarIHFL);
+                            }
+                            else if (AggregatorName.ToLower() == "nasdigital")
+                            {
+                                Requestbody = JsonConvert.SerializeObject(PRNASDigital);
+                            }
+                            else if (AggregatorName.ToLower() == "nupay")
+                            {
+                                Requestbody = JsonConvert.SerializeObject(PRNupayCriss);
+                            }
+                            else
+                            {
+                                log.Append("-------------------------------------------------------------------------------" + Environment.NewLine);
+
+
+                                _formdatasb = Helper.GetJsonData(ds, log);
+
+                                if (input["BillerParam"].ContainsKey("ISJsonArray"))
+                                {
+                                    string isJsonArray = input["BillerParam"]["ISJsonArray"] != null ? Convert.ToString(input["BillerParam"]["ISJsonArray"]) : "";
+                                    if (isJsonArray == "TRUE")
+                                    {
+                                        _formdatasb = "[" + _formdatasb + "]";
+                                    }
+                                }
+                                ContentType = "application/json";
+                                input["BillerParam"]["ContentType"] = ContentType;
+                                input["BillerParam"]["Body"] = _formdatasb;
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    input["BillerParam"]["RefId"] = RefId;
+                    string strContentType = Convert.ToString(input["BillerParam"]["ContentType"]);
+                    ContentType = string.Format(strContentType);
+                    input["BillerParam"]["ContentType"] = ContentType;
+                    input["BillerParam"]["Body"] = xmldata;
+                }
+
+                if (AggregatorName == "JupiterOrison")
+                {
+                    output = HelperAggregator.POSTJupiter(BillerId, Requestbody, input["BillerParam"]["RefId"].ToString(), ReqParam["BillerBillFetchURL"].ToString(), log, AggregatorName, AggregatorID);
+                }
+                if (AggregatorName.ToLower() == "indostar")
+                {
+                    output = HelperAggregator.POSTIndoStar(BillerId, Requestbody, input["BillerParam"]["RefId"].ToString(), ReqParam["BillerBillFetchURL"].ToString(), log, AggregatorName, AggregatorID);
+                }
+                if (AggregatorName.ToLower() == "indostarihfl")
+                {
+                    output = HelperAggregator.POSTIndoStarIHFL(BillerId, Requestbody, input["BillerParam"]["RefId"].ToString(), ReqParam["BillerBillFetchURL"].ToString(), log, AggregatorName, AggregatorID);
+                }
+                if (AggregatorName.ToLower() == "nasdigital")
+                {
+                    output = HelperAggregator.POSTNASDigital(BillerId, Requestbody, input["BillerParam"]["RefId"].ToString(), ReqParam["BillerBillFetchURL"].ToString(), log, AggregatorName, AggregatorID);
+                }
+                if (AggregatorName.ToLower() == "nupay")
+                {
+                    string BillerToken = await dbService.GetBillerToken("CRIS00000NATYE");
+                    output = HelperAggregator.POSTNupay(BillerId, Requestbody, input["BillerParam"]["RefId"].ToString(), ReqParam["BillerBillFetchURL"].ToString(), log, AggregatorName, AggregatorID, BillerToken, NupayAPIKey);
+                }
+            }
+            else if (AuthenticationMode == "ONEWAY")
+            {
+                input.Add("RequestHeaders", new Dictionary<string, object>());
+                dsResult = dbService.GetRequestParams(RefId);
+
+
+
+                Dictionary<string, string> ReqParam;
+                string xmlobjDsResult = dsResult.GetXml();
+
+                ReqParam = await dbService.AddRequestParam(xmlobjDsResult, Address, BillerId);
+
+                input["BillerParam"].Add("Address", ReqParam["BillerBillFetchURL"]);
+                xmldata = ReqParam["Xmldata"].ToString();
+                if (Convert.ToString(input["BillerParam"]["ContentType"]) == "application/json")
+                {
+                    DataSet ds = new DataSet();
+                    using (StringReader sr = new StringReader(xmldata))
+                    {
+                        ds.ReadXml(sr);
+                        if (ds != null && ds?.Tables.Count > 0 && ds?.Tables[0].Rows.Count > 0)
+                        {
+                            input["BillerParam"]["RefId"] = Convert.ToString(ds.Tables[0].Rows[0]["ORDERID"]);
+
+
+                            if (BillerId == "ADAN00000NAT01")
+                            {
+                                string CustomerId = Convert.ToString(ds.Tables[0].Rows[0]["CUSTOMERID"]);
+                                CustomerId = CustomerId.Remove(0, RemoveLength);
+                                ds.Tables[0].Rows[0]["CUSTOMERID"] = Convert.ToString(CustomerId);
+                            }
+                            else if (BillerId == "INDI00000NATYG")
+                            {
+
+                                log.Append("-------------------------------------------------------------------------------" + Environment.NewLine);
+
+
+                                string LanNo = Convert.ToString(ds.Tables[0].Rows[0]["LANNo"]);
+                                string Amount = Convert.ToString(ds.Tables[0].Rows[0]["txn_amt"]);
+                                string PaymentGatewayRefNo = Convert.ToString(ds.Tables[0].Rows[0]["ORDERID"]);
+                                string BankName = Convert.ToString(ds.Tables[0].Rows[0]["bank_name"]);
+                                string BankCode = "";
+                                string Trans_Status = Convert.ToString(ds.Tables[0].Rows[0]["txn_status"]);
+                                string ErrorCode = "";
+                                string ErrorMessage = "";
+
+                                string IBRefNo = Convert.ToString(ds.Tables[0].Rows[0]["IBRefNo"]);
+
+                                log.Append("GET IndiaBullHsg Request : " + Environment.NewLine
+                                        + "LanNo: " + LanNo + Environment.NewLine
+                                        + "Amount: " + Amount + Environment.NewLine
+                                       + "PaymentGatewayRefNo: " + PaymentGatewayRefNo + Environment.NewLine
+                                        + "BankName: " + BankName + Environment.NewLine
+                                        + "BankCode: " + BankCode + Environment.NewLine
+                                       + "Trans_Status: " + Trans_Status + Environment.NewLine
+                                        + "ErrorCode: " + ErrorCode + Environment.NewLine
+                                        + "ErrorMessage: " + ErrorMessage + Environment.NewLine
+                                       + "IBRefNo: " + IBRefNo + Environment.NewLine
+                                        + Environment.NewLine);
+
+                                var LanNoEncry = Base64Encode(LanNo);
+
+                                var PaymentGatewayRefNoEncry = Base64Encode(PaymentGatewayRefNo);
+                                var BankNameEncry = Base64Encode(BankName);
+                                var BankCodeEncry = Base64Encode(BankCode);
+                                var Trans_StatusEncry = Base64Encode(Trans_Status);
+                                var ErrorCodeEncry = Base64Encode(ErrorCode);
+                                var ErrorMessageEncry = Base64Encode(ErrorMessage);
+                                var IBRefNoEncry = Base64Encode(IBRefNo);
+
+                                PR.LanNo = LanNoEncry;
+                                PR.Amount = decimal.Parse(Amount);
+                                PR.PaymentGatewayRefNo = PaymentGatewayRefNoEncry;
+                                PR.BankName = BankNameEncry;
+                                PR.BankCode = BankCodeEncry;
+                                PR.Trans_Status = Trans_StatusEncry;
+                                PR.ErrorCode = ErrorCodeEncry;
+                                PR.ErrorMessage = ErrorMessageEncry;
+                                PR.IBRefNo = IBRefNoEncry;
+
+                            }
+                            else if (BillerId.ToUpper() == "VAST00000NATLW")
+                            {
+                                string username = Convert.ToString(ds.Tables[0].Rows[0]["username"]);
+                                string password = Convert.ToString(ds.Tables[0].Rows[0]["password"]);
+                                string code = Convert.ToString(ds.Tables[0].Rows[0]["code"]);
+                                string unique_ref_number = Convert.ToString(ds.Tables[0].Rows[0]["unique_ref_number"]);
+                                string transaction_id = Convert.ToString(ds.Tables[0].Rows[0]["transaction_id"]);
+                                string transaction_amount = Convert.ToString(ds.Tables[0].Rows[0]["transaction_amount"]);
+                                string transaction_time = Convert.ToString(ds.Tables[0].Rows[0]["transaction_time"]);
+                                string loan_application_number = Convert.ToString(ds.Tables[0].Rows[0]["loan_application_number"]);
+
+
+                                log.Append("GET VastuHsg Request : " + Environment.NewLine
+                                        + "username: " + username + Environment.NewLine
+                                        + "password: " + password + Environment.NewLine
+                                       + "code: " + code + Environment.NewLine
+                                        + "unique_ref_number: " + unique_ref_number + Environment.NewLine
+                                        + "transaction_id: " + transaction_id + Environment.NewLine
+                                       + "transaction_amount: " + transaction_amount + Environment.NewLine
+                                        + "transaction_time: " + transaction_time + Environment.NewLine
+                                        + "loan_application_number: " + loan_application_number + Environment.NewLine
+                                        + Environment.NewLine);
+                                PRV.username = username;
+                                PRV.password = password;
+                                PRV.code = code;
+                                PRV.unique_ref_number = unique_ref_number;
+                                PRV.transaction_id = transaction_id;
+                                PRV.transaction_amount = transaction_amount;
+                                PRV.transaction_time = transaction_time;
+                                PRV.loan_application_number = loan_application_number;
+                            }
+                            else if (BillerId.ToUpper() == "SVAT00000NATUB")
+                            {
+                                log.Append("-------------------------------------------------------------------------------" + Environment.NewLine);
+                                string LoanAccountNo2 = string.Empty;
+                                log.Append("DataSet:" + ds.ToString() + Environment.NewLine);
+                                string ClientID = Convert.ToString(ds.Tables[0].Rows[0]["ClientID"]);
+                                string Custname = Convert.ToString(ds.Tables[0].Rows[0]["Custname"]);
+                                string Mobile = Convert.ToString(ds.Tables[0].Rows[0]["Mobile"]);
+                                string BranchCode = Convert.ToString(ds.Tables[0].Rows[0]["BranchCode"]);
+                                string CenterId = Convert.ToString(ds.Tables[0].Rows[0]["CenterId"]);
+                                string GroupCode = Convert.ToString(ds.Tables[0].Rows[0]["GroupCode"]);
+                                string GroupName = Convert.ToString(ds.Tables[0].Rows[0]["GroupName"]);
+                                string MemberAttandedYN = Convert.ToString(ds.Tables[0].Rows[0]["MemberAttandedYN"]);
+                                string CollectedBy = Convert.ToString(ds.Tables[0].Rows[0]["CollectedBy"]);
+                                string ModeOfCollection = Convert.ToString(ds.Tables[0].Rows[0]["ModeOfCollection"]);
+                                string BankAcctSrNo = Convert.ToString(ds.Tables[0].Rows[0]["BankAcctSrNo"]);
+                                string LoanAccountNo1 = Convert.ToString(ds.Tables[0].Rows[0]["LoanAccountNo1"]);
+                                DataTable dt = ds.Tables[0];
+                                if (dt.Columns.Contains("LoanAccountNo2"))
+                                {
+                                    LoanAccountNo2 = Convert.ToString(ds.Tables[0].Rows[0]["LoanAccountNo2"]);
+                                }
+                                string LoanAccountNo3 = Convert.ToString(ds.Tables[0].Rows[0]["LoanAccountNo3"]);
+                                string LoanAccountNo4 = Convert.ToString(ds.Tables[0].Rows[0]["LoanAccountNo4"]);
+                                string LoanAccountNo5 = Convert.ToString(ds.Tables[0].Rows[0]["LoanAccountNo5"]);
+                                string DemandAccountNo1 = Convert.ToString(ds.Tables[0].Rows[0]["DemandAccountNo1"]);
+                                string DemandAccountNo2 = Convert.ToString(ds.Tables[0].Rows[0]["DemandAccountNo2"]);
+                                string DemandAccountNo3 = Convert.ToString(ds.Tables[0].Rows[0]["DemandAccountNo3"]);
+                                string DemandAccountNo4 = Convert.ToString(ds.Tables[0].Rows[0]["DemandAccountNo4"]);
+                                string DemandAccountNo5 = Convert.ToString(ds.Tables[0].Rows[0]["DemandAccountNo5"]);
+                                string DueDateAccountNo1 = Convert.ToString(ds.Tables[0].Rows[0]["DueDateAccountNo1"]);
+                                string DueDateAccountNo2 = Convert.ToString(ds.Tables[0].Rows[0]["DueDateAccountNo2"]);
+                                string DueDateAccountNo3 = Convert.ToString(ds.Tables[0].Rows[0]["DueDateAccountNo3"]);
+                                string DueDateAccountNo4 = Convert.ToString(ds.Tables[0].Rows[0]["DueDateAccountNo4"]);
+                                string DueDateAccountNo5 = Convert.ToString(ds.Tables[0].Rows[0]["DueDateAccountNo5"]);
+                                string TransactionRefID = Convert.ToString(ds.Tables[0].Rows[0]["TransactionRefID"]);
+                                string CollectionDateTime = Convert.ToString(ds.Tables[0].Rows[0]["CollectionDateTime"]);
+                                string PaymentMethod = Convert.ToString(ds.Tables[0].Rows[0]["PaymentMethod"]);
+                                string TotalAmount = Convert.ToString(ds.Tables[0].Rows[0]["TotalAmount"]);
+
+                                log.Append("GET Svatantra Request : " + Environment.NewLine
+                                       + "ClientID: " + ClientID + Environment.NewLine
+                                       + "Custname: " + Custname + Environment.NewLine
+                                       + "Mobile: " + Mobile + Environment.NewLine
+                                       + "BranchCode: " + BranchCode + Environment.NewLine
+                                       + "CenterId: " + CenterId + Environment.NewLine
+                                       + "GroupCode: " + GroupCode + Environment.NewLine
+                                       + "GroupName: " + GroupName + Environment.NewLine
+                                       + "MemberAttandedYN: " + MemberAttandedYN + Environment.NewLine
+                                       + "CollectedBy: " + CollectedBy + Environment.NewLine
+                                       + "ModeOfCollection: " + ModeOfCollection + Environment.NewLine
+                                       + "BankAcctSrNo: " + BankAcctSrNo + Environment.NewLine
+                                       + "LoanAccountNo1: " + LoanAccountNo1 + Environment.NewLine
+                                       + "LoanAccountNo2: " + LoanAccountNo2 + Environment.NewLine
+                                       + "LoanAccountNo3: " + LoanAccountNo3 + Environment.NewLine
+                                       + "LoanAccountNo4: " + LoanAccountNo4 + Environment.NewLine
+                                       + "LoanAccountNo5: " + LoanAccountNo5 + Environment.NewLine
+                                       + "DemandAccountNo1: " + DemandAccountNo1 + Environment.NewLine
+                                       + "DemandAccountNo2: " + DemandAccountNo2 + Environment.NewLine
+                                       + "DemandAccountNo3: " + DemandAccountNo3 + Environment.NewLine
+                                       + "DemandAccountNo4: " + DemandAccountNo4 + Environment.NewLine
+                                       + "DemandAccountNo5: " + DemandAccountNo5 + Environment.NewLine
+                                       + "DueDateAccountNo1: " + DueDateAccountNo1 + Environment.NewLine
+                                       + "DueDateAccountNo2: " + DueDateAccountNo2 + Environment.NewLine
+                                       + "DueDateAccountNo3: " + DueDateAccountNo3 + Environment.NewLine
+                                       + "DueDateAccountNo4: " + DueDateAccountNo4 + Environment.NewLine
+                                       + "DueDateAccountNo5: " + DueDateAccountNo5 + Environment.NewLine
+                                       + "TransactionRefID: " + TransactionRefID + Environment.NewLine
+                                       + "CollectionDateTime: " + CollectionDateTime + Environment.NewLine
+                                       + "PaymentMethod: " + PaymentMethod + Environment.NewLine
+                                       + "TotalAmount: " + TotalAmount + Environment.NewLine
+                                       + Environment.NewLine);
+
+                                PRS.ClientID = Convert.ToInt32(ClientID);
+                                PRS.Custname = Custname;
+                                PRS.Mobile = Mobile;
+                                PRS.BranchCode = Convert.ToInt32(BranchCode);
+                                PRS.CenterId = Convert.ToInt32(CenterId);
+                                PRS.GroupCode = Convert.ToInt32(GroupCode);
+                                PRS.GroupName = GroupName.Trim();
+                                PRS.MemberAttandedYN = MemberAttandedYN;
+                                PRS.CollectedBy = Convert.ToInt32(CollectedBy);
+                                PRS.ModeOfCollection = ModeOfCollection;
+                                PRS.BankAcctSrNo = BankAcctSrNo;
+                                PRS.LoanAccountNo1 = LoanAccountNo1.Trim();
+                                PRS.LoanAccountNo2 = LoanAccountNo2.Trim();
+                                PRS.LoanAccountNo3 = LoanAccountNo3.Trim();
+                                PRS.LoanAccountNo4 = LoanAccountNo4.Trim();
+                                PRS.LoanAccountNo5 = LoanAccountNo5.Trim();
+                                PRS.DemandAccountNo1 = float.Parse(DemandAccountNo1);
+                                PRS.DemandAccountNo2 = float.Parse(DemandAccountNo2);
+                                PRS.DemandAccountNo3 = float.Parse(DemandAccountNo3);
+                                PRS.DemandAccountNo4 = float.Parse(DemandAccountNo4);
+                                PRS.DemandAccountNo5 = float.Parse(DemandAccountNo5);
+                                PRS.DueDateAccountNo1 = DueDateAccountNo1;
+                                PRS.DueDateAccountNo2 = DueDateAccountNo2;
+                                PRS.DueDateAccountNo3 = DueDateAccountNo3;
+                                PRS.DueDateAccountNo4 = DueDateAccountNo4;
+                                PRS.DueDateAccountNo5 = DueDateAccountNo5;
+                                PRS.TransactionRefID = TransactionRefID;
+                                PRS.CollectionDateTime = CollectionDateTime;
+                                PRS.PaymentMethod = PaymentMethod;
+                                PRS.TotalAmount = float.Parse(TotalAmount);
+
+                            }
+                            else if (BillerId.ToUpper() == "INDU00000NATQH")
+                            {
+                                log.Append("-------------------------------------------------------------------------------" + Environment.NewLine);
+
+                                string entity = Convert.ToString(ds.Tables[0].Rows[0]["entity"]);
+                                string client_validate_no = Convert.ToString(ds.Tables[0].Rows[0]["client_validate_no"]);
+                                string referenceId = Convert.ToString(ds.Tables[0].Rows[0]["referenceId"]);
+                                string amount = Convert.ToString(ds.Tables[0].Rows[0]["amount"]);
+                                string transactionId = Convert.ToString(ds.Tables[0].Rows[0]["transactionId"]);
+                                string date = Convert.ToString(ds.Tables[0].Rows[0]["date"]);
+                                string Depositor_Mobile_Number = Convert.ToString(ds.Tables[0].Rows[0]["Depositor_Mobile_Number"]);
+
+                                log.Append("GET Request : " + Environment.NewLine
+                                                            + "entity: " + entity + Environment.NewLine
+                                                            + "client_validate_no: " + client_validate_no + Environment.NewLine
+                                                            + "referenceId: " + referenceId + Environment.NewLine
+                                                            + "amount: " + amount + Environment.NewLine
+                                                            + "transactionId: " + transactionId + Environment.NewLine
+                                                            + "date: " + date + Environment.NewLine
+                                                            + "Depositor_Mobile_Number: " + Depositor_Mobile_Number + Environment.NewLine
+                                                            + Environment.NewLine);
+
+                                PRCFD.entity = entity;
+                                PRCFD.client_validate_no = client_validate_no;
+                                PRCFD.referenceId = referenceId;
+                                PRCFD.amount = amount;
+                                PRCFD.transactionId = transactionId;
+                                PRCFD.date = date;
+                                PRCFD.Depositor_Mobile_Number = Depositor_Mobile_Number;
+                            }
+                            else if (BillerId.ToUpper() == "INDI00000NAT12")  //India Shelter
+                            {
+                                string dateOfCollection = Convert.ToString(ds.Tables[0].Rows[0]["dateOfCollection"]);
+                                string instrument = Convert.ToString(ds.Tables[0].Rows[0]["instrument"]);
+                                string loanNumber = Convert.ToString(ds.Tables[0].Rows[0]["loanNumber"]);
+                                string employeecode = Convert.ToString(ds.Tables[0].Rows[0]["employeecode"]);
+                                string customerBankNameBranch = Convert.ToString(ds.Tables[0].Rows[0]["customerBankNameBranch"]);
+                                string cusChequeNo = Convert.ToString(ds.Tables[0].Rows[0]["cusChequeNo"]);
+                                string cusChequeDate = Convert.ToString(ds.Tables[0].Rows[0]["cusChequeDate"]);
+                                string mobileNoReceipt = Convert.ToString(ds.Tables[0].Rows[0]["mobileNoReceipt"]);
+                                string clearanceStatus = Convert.ToString(ds.Tables[0].Rows[0]["clearanceStatus"]);
+                                string source = Convert.ToString(ds.Tables[0].Rows[0]["source"]);
+                                string bankname = Convert.ToString(ds.Tables[0].Rows[0]["bankname"]);
+                                string dateofdeposit = Convert.ToString(ds.Tables[0].Rows[0]["dateofdeposit"]);
+                                string depositSlipNo = Convert.ToString(ds.Tables[0].Rows[0]["depositSlipNo"]);
+                                string status = Convert.ToString(ds.Tables[0].Rows[0]["status"]);
+                                string challan_no = Convert.ToString(ds.Tables[0].Rows[0]["challan_no"]);
+                                string uploadBatchNo = Convert.ToString(ds.Tables[0].Rows[0]["uploadBatchNo"]);
+                                string presentation_no = Convert.ToString(ds.Tables[0].Rows[0]["presentation_no"]);
+                                string deposited_in_bank = Convert.ToString(ds.Tables[0].Rows[0]["deposited_in_bank"]);
+                                string cancel_remarks_new = Convert.ToString(ds.Tables[0].Rows[0]["cancel_remarks_new"]);
+                                string mode = Convert.ToString(ds.Tables[0].Rows[0]["mode"]);
+                                string collector_type = Convert.ToString(ds.Tables[0].Rows[0]["collector_type"]);
+                                string deposit_channel = Convert.ToString(ds.Tables[0].Rows[0]["deposit_channel"]);
+                                string natureofCollection = Convert.ToString(ds.Tables[0].Rows[0]["natureofCollection"]);
+                                string amount = Convert.ToString(ds.Tables[0].Rows[0]["amount"]);
+                                string pancardImage = Convert.ToString(ds.Tables[0].Rows[0]["pancardImage"]);
+                                string uploadReceiptNum = Convert.ToString(ds.Tables[0].Rows[0]["uploadReceiptNum"]);
+                                string narration = Convert.ToString(ds.Tables[0].Rows[0]["narration"]);
+
+                                PRIS.dateOfCollection = dateOfCollection;
+                                PRIS.instrument = instrument;
+                                PRIS.loanNumber = loanNumber;
+                                PRIS.employeecode = employeecode;
+                                PRIS.customerBankNameBranch = customerBankNameBranch;
+                                PRIS.cusChequeNo = cusChequeNo;
+                                PRIS.cusChequeDate = cusChequeDate;
+                                PRIS.mobileNoReceipt = mobileNoReceipt;
+                                PRIS.clearanceStatus = clearanceStatus;
+                                PRIS.source = source;
+                                PRIS.bankname = bankname;
+                                PRIS.dateofdeposit = dateofdeposit;
+                                PRIS.depositSlipNo = depositSlipNo;
+                                PRIS.status = status;
+                                PRIS.challan_no = challan_no;
+                                PRIS.uploadBatchNo = uploadBatchNo;
+                                PRIS.presentation_no = presentation_no;
+                                PRIS.deposited_in_bank = Convert.ToBoolean(deposited_in_bank);
+                                PRIS.cancel_remarks_new = cancel_remarks_new;
+                                PRIS.mode = mode;
+                                PRIS.collector_type = collector_type;
+                                PRIS.deposit_channel = deposit_channel;
+
+                                List<Chargedetail> Chargedetaillist = new List<Chargedetail>();
+                                Chargedetail cd = new Chargedetail();
+                                cd.natureofCollection = natureofCollection;
+                                cd.amount = amount;
+                                cd.pancardImage = pancardImage;
+                                cd.uploadReceiptNum = uploadReceiptNum;
+                                cd.narration = narration;
+                                Chargedetaillist.Add(cd);
+
+                                PRIS.Chargedetails = Chargedetaillist;
+                            }
+                            else if (BillerId.ToUpper() == "BHAR00000NAT52")
+                            {
+                                log.Append("-------------------------------------------------------------------------------" + Environment.NewLine);
+
+                                string username = Convert.ToString(ds.Tables[0].Rows[0]["Username"]);
+                                string password = Convert.ToString(ds.Tables[0].Rows[0]["Password"]);
+                                string Host = Convert.ToString(ds.Tables[0].Rows[0]["Host"]);
+                                string DueDate = Convert.ToString(ds.Tables[0].Rows[0]["DueDate"]);
+                                string ReferenceNum = Convert.ToString(ds.Tables[0].Rows[0]["ReferenceNum"]);
+                                string ClientID = Convert.ToString(ds.Tables[0].Rows[0]["ClientID"]);
+                                string DueAmount = Convert.ToString(ds.Tables[0].Rows[0]["DueAmount"]);
+                                string TxnRefID = Convert.ToString(ds.Tables[0].Rows[0]["TxnRefID"]);
+
+                                input["BillerParam"]["username"] = Convert.ToString(ds.Tables[0].Rows[0]["username"]);
+                                input["BillerParam"]["password"] = Convert.ToString(ds.Tables[0].Rows[0]["password"]);
+
+                                log.Append("GET CollectionConfirmationBFIL Request : " + Environment.NewLine
+                                                                                       + "username: " + username + Environment.NewLine
+                                                                                       + "password: " + password + Environment.NewLine
+                                                                                       + "Host: " + Host + Environment.NewLine
+                                                                                       + "DueDate: " + DueDate + Environment.NewLine
+                                                                                       + "ReferenceNum: " + ReferenceNum + Environment.NewLine
+                                                                                       + "ClientID: " + ClientID + Environment.NewLine
+                                                                                       + "DueAmount: " + DueAmount + Environment.NewLine
+                                                                                       + "TxnRefID: " + TxnRefID + Environment.NewLine
+                                                                                       + Environment.NewLine);
+
+                                PRC.username = username;
+                                PRC.password = password;
+                                PRC.Host = Host;
+                                PRC.DueDate = DueDate;
+                                PRC.ReferenceNum = ReferenceNum;
+                                PRC.ClientID = ClientID;
+                                PRC.DueAmount = DueAmount;
+                                PRC.TxnRefID = TxnRefID;
+
+                            }
+                            else if (BillerId.ToUpper() == "HDBF00000NATGJ")
+                            {
+                                log.Append("-------------------------------------------------------------------------------" + Environment.NewLine);
+
+                                string Loan_Number = Convert.ToString(ds.Tables[0].Rows[0]["Loan_Number"]);
+                                string Status = Convert.ToString(ds.Tables[0].Rows[0]["Status"]);
+                                string Transanction_Id = Convert.ToString(ds.Tables[0].Rows[0]["Transanction_Id"]);
+                                string Paid_Amount = Convert.ToString(ds.Tables[0].Rows[0]["Paid_Amount"]);
+                                string Order_Id = Convert.ToString(ds.Tables[0].Rows[0]["Order_Id"]);
+                                string IBL_Ref_No = Convert.ToString(ds.Tables[0].Rows[0]["IBL_Ref_No"]);
+
+                                log.Append("GET CollectionConfirmationHDBF Request : " + Environment.NewLine
+                                                                                       + "Loan_Number: " + Loan_Number + Environment.NewLine
+                                                                                       + "Status: " + Status + Environment.NewLine
+                                                                                       + "Transanction_Id: " + Transanction_Id + Environment.NewLine
+                                                                                       + "Paid_Amount: " + Paid_Amount + Environment.NewLine
+                                                                                       + "Order_Id: " + Order_Id + Environment.NewLine
+                                                                                       + "IBL_Ref_No: " + IBL_Ref_No + Environment.NewLine
+                                                                                       + Environment.NewLine);
+                                PRHDBF.Loan_Number = Loan_Number;
+                                PRHDBF.Status = Status;
+                                PRHDBF.Transanction_Id = Transanction_Id;
+                                PRHDBF.Paid_Amount = Paid_Amount;
+                                PRHDBF.Order_Id = Order_Id;
+                                PRHDBF.IBL_Ref_No = IBL_Ref_No;
+
+                            }
+                            else if (BillerId.ToUpper() == "SATI00000NATB1")
+                            {
+                                log.Append("-------------------------------------------------------------------------------" + Environment.NewLine);
+
+                                string clResponse = Convert.ToString(ds.Tables[0].Rows[0]["clResponse"]);
+                                string clRrn = Convert.ToString(ds.Tables[0].Rows[0]["clRrn"]);
+                                string clStatus = Convert.ToString(ds.Tables[0].Rows[0]["clStatus"]);
+                                string clTransAmount = Convert.ToString(ds.Tables[0].Rows[0]["clTransAmount"]);
+                                string clTxnId = Convert.ToString(ds.Tables[0].Rows[0]["clTxnId"]);
+                                string collectionPartnerId = Convert.ToString(ds.Tables[0].Rows[0]["collectionPartnerId"]);
+                                string loanId = Convert.ToString(ds.Tables[0].Rows[0]["loanId"]);
+                                string transactionInitiationSource = Convert.ToString(ds.Tables[0].Rows[0]["transactionInitiationSource"]);
+                                string ORDERID = Convert.ToString(ds.Tables[0].Rows[0]["ORDERID"]);
+
+
+                                log.Append("GET CollectionConfirmationSATIN Request : " + Environment.NewLine
+                                                                                       + "clResponse: " + clResponse + Environment.NewLine
+                                                                                       + "clRrn: " + clRrn + Environment.NewLine
+                                                                                       + "clStatus: " + clStatus + Environment.NewLine
+                                                                                       + "clTransAmount: " + clTransAmount + Environment.NewLine
+                                                                                       + "clTxnId: " + clTxnId + Environment.NewLine
+                                                                                       + "collectionPartnerId: " + collectionPartnerId + Environment.NewLine
+                                                                                       + "loanId: " + loanId + Environment.NewLine
+                                                                                       + "transactionInitiationSource: " + transactionInitiationSource + Environment.NewLine
+                                                                                       + "ORDERID: " + ORDERID + Environment.NewLine
+                                                                                       + Environment.NewLine);
+
+                                PRSATIN.clResponse = clResponse;
+                                PRSATIN.clRrn = clRrn;
+                                PRSATIN.clStatus = clStatus;
+                                PRSATIN.clTransAmount = clTransAmount;
+                                PRSATIN.clTxnId = clTxnId;
+                                PRSATIN.collectionPartnerId = collectionPartnerId;
+                                PRSATIN.loanId = loanId;
+                                PRSATIN.transactionInitiationSource = transactionInitiationSource;
+                                PRSATIN.ORDERID = ORDERID;
+                            }
+                            else if (BillerId.ToUpper() == "BAJA00000NATDK")   //BHFL
+                            {
+                                log.Append("-------------------------------------------------------------------------------" + Environment.NewLine);
+
+                                string loan_no = Convert.ToString(ds.Tables[0].Rows[0]["loan_no"]);
+                                decimal amt_paid = Convert.ToDecimal(ds.Tables[0].Rows[0]["amt_paid"]);
+                                string paid_date = Convert.ToString(ds.Tables[0].Rows[0]["paid_date"]);
+                                string trans_ref_no = Convert.ToString(ds.Tables[0].Rows[0]["trans_ref_no"]);
+                                string payment_for = Convert.ToString(ds.Tables[0].Rows[0]["payment_for"]);
+                                string source = Convert.ToString(ds.Tables[0].Rows[0]["source"]);
+                                string panNo = Convert.ToString(ds.Tables[0].Rows[0]["panNo"]);
+
+                                log.Append("GET CollectionConfirmation BHFL Request : " + Environment.NewLine
+                                                                                        + "loan_no: " + loan_no + Environment.NewLine
+                                                                                        + "amt_paid: " + amt_paid + Environment.NewLine
+                                                                                        + "paid_date: " + paid_date + Environment.NewLine
+                                                                                        + "trans_ref_no: " + trans_ref_no + Environment.NewLine
+                                                                                        + "payment_for: " + payment_for + Environment.NewLine
+                                                                                        + "source: " + source + Environment.NewLine
+                                                                                        + "panNo: " + panNo + Environment.NewLine
+                                                                                        + Environment.NewLine);
+
+
+
+                                string request = loan_no + amt_paid + paid_date + trans_ref_no + source;
+                                string hexPassword = AuthorizationBHFL;
+                                string checksum = AesEncrypt.AES_ENCRYPT(request, hexPassword);
+
+                                PRBHFL.loan_no = loan_no;
+                                PRBHFL.amt_paid = amt_paid;
+                                PRBHFL.paid_date = paid_date;
+                                PRBHFL.trans_ref_no = trans_ref_no;
+                                PRBHFL.payment_for = payment_for;
+                                PRBHFL.checksum = checksum;
+                                PRBHFL.source = source;
+                                PRBHFL.panNo = panNo;
+
+                            }
+                            else if (BillerId.ToUpper() == "ADIT00000NATZ1")
+                            {
+                                log.Append("-------------------------------------------------------------------------------" + Environment.NewLine);
+
+                                string ref_id = Convert.ToString(ds.Tables[0].Rows[0]["ref_id"]);
+                                string loan_account_no = Convert.ToString(ds.Tables[0].Rows[0]["loan_account_no"]);
+                                string customer_name = Convert.ToString(ds.Tables[0].Rows[0]["customer_name"]);
+                                string vendor_name = Convert.ToString(ds.Tables[0].Rows[0]["vendor_name"]);
+                                string txn_ref_no = Convert.ToString(ds.Tables[0].Rows[0]["txn_ref_no"]);
+                                string txn_date = Convert.ToString(ds.Tables[0].Rows[0]["txn_date"]);
+                                string txn_amt = Convert.ToString(ds.Tables[0].Rows[0]["txn_amt"]);
+                                string payment_channel = Convert.ToString(ds.Tables[0].Rows[0]["payment_channel"]);
+                                string payment_mode = Convert.ToString(ds.Tables[0].Rows[0]["payment_mode"]);
+                                string bbps_source = Convert.ToString(ds.Tables[0].Rows[0]["bbps_source"]);
+                                string status = Convert.ToString(ds.Tables[0].Rows[0]["status"]);
+                                string ORDERID = Convert.ToString(ds.Tables[0].Rows[0]["ORDERID"]);
+
+
+                                log.Append("GET AdityaBirla Request : " + Environment.NewLine
+                                                                        + "ref_id: " + ref_id + Environment.NewLine
+                                                                        + "loan_account_no: " + loan_account_no + Environment.NewLine
+                                                                        + "customer_name: " + customer_name + Environment.NewLine
+                                                                        + "vendor_name: " + vendor_name + Environment.NewLine
+                                                                        + "txn_ref_no: " + txn_ref_no + Environment.NewLine
+                                                                        + "txn_date: " + txn_date + Environment.NewLine
+                                                                        + "txn_amt: " + txn_amt + Environment.NewLine
+                                                                        + "payment_channel: " + payment_channel + Environment.NewLine
+                                                                        + "bbps_source: " + bbps_source + Environment.NewLine
+                                                                        + "payment_mode: " + payment_mode + Environment.NewLine
+                                                                        + "status: " + status + Environment.NewLine
+                                                                        + "ORDERID: " + ORDERID + Environment.NewLine
+                                                                        + Environment.NewLine);
+
+                                PABFL.ref_id = ref_id;
+                                PABFL.loan_account_no = loan_account_no;
+                                PABFL.customer_name = customer_name;
+                                PABFL.vendor_name = vendor_name;
+                                PABFL.txn_ref_no = txn_ref_no;
+                                PABFL.txn_date = txn_date;
+                                PABFL.txn_amt = txn_amt;
+                                PABFL.payment_channel = payment_channel;
+                                PABFL.bbps_source = bbps_source;
+                                PABFL.payment_mode = payment_mode;
+                                PABFL.status = status;
+
+                            }
+                            else if (BillerId.ToUpper() == "BELS00000NATD7")
+                            {
+                                log.Append("-------------------------------------------------------------------------------" + Environment.NewLine);
+
+                                string Belstar_Ref_No = Convert.ToString(ds.Tables[0].Rows[0]["Belstar_Ref_No"]);
+                                string Loan_Acc_No = Convert.ToString(ds.Tables[0].Rows[0]["Loan_Acc_No"]);
+                                string Transaction_Amount = Convert.ToString(ds.Tables[0].Rows[0]["Transaction_Amount"]);
+                                string Transaction_Date_and_time = Convert.ToString(ds.Tables[0].Rows[0]["Transaction_Date_and_time"]);
+                                string Mode_of_payment = Convert.ToString(ds.Tables[0].Rows[0]["Mode_of_payment"]);
+                                string NPCI_Transaction_Ref_no = Convert.ToString(ds.Tables[0].Rows[0]["NPCI_Transaction_Ref_no"]);
+                                string Bank_Transaction_ID = Convert.ToString(ds.Tables[0].Rows[0]["Bank_Transaction_ID"]);
+                                string request_source = Convert.ToString(ds.Tables[0].Rows[0]["request_source"]);
+                                string transaction_status = Convert.ToString(ds.Tables[0].Rows[0]["transaction_status"]);
+
+                                log.Append("GET Belstar Request : " + Environment.NewLine
+                                                                    + "Belstar_Ref_No: " + Belstar_Ref_No + Environment.NewLine
+                                                                    + "Loan_Acc_No: " + Loan_Acc_No + Environment.NewLine
+                                                                    + "Transaction_Amount: " + Transaction_Amount + Environment.NewLine
+                                                                    + "Transaction_Date_and_time: " + Transaction_Date_and_time + Environment.NewLine
+                                                                    + "Mode_of_payment: " + Mode_of_payment + Environment.NewLine
+                                                                    + "NPCI_Transaction_Ref_no: " + NPCI_Transaction_Ref_no + Environment.NewLine
+                                                                    + "Bank_Transaction_ID: " + Bank_Transaction_ID + Environment.NewLine
+                                                                    + "request_source: " + request_source + Environment.NewLine
+                                                                    + "transaction_status: " + transaction_status + Environment.NewLine
+                                                                    + Environment.NewLine);
+
+                                PRBEL.Belstar_Ref_No = Belstar_Ref_No;
+                                PRBEL.Loan_Acc_No = Loan_Acc_No;
+                                PRBEL.Transaction_Amount = Transaction_Amount;
+                                PRBEL.Transaction_Date_and_time = Transaction_Date_and_time;
+                                PRBEL.Mode_of_payment = Mode_of_payment;
+                                PRBEL.NPCI_Transaction_Ref_no = NPCI_Transaction_Ref_no;
+                                PRBEL.Bank_Transaction_ID = Bank_Transaction_ID;
+                                PRBEL.request_source = request_source;
+                                PRBEL.transaction_status = transaction_status;
+                            }
+                            else if (BillerId.ToUpper() == "SHIM00000SHM5C")
+                            {
+                                log.Append("-------------------------------------------------------------------------------" + Environment.NewLine);
+
+                                string consumerId = Convert.ToString(ds.Tables[0].Rows[0]["consumerId"]);
+                                string billNo = Convert.ToString(ds.Tables[0].Rows[0]["billNo"]);
+                                string trackingId = Convert.ToString(ds.Tables[0].Rows[0]["trackingId"]);
+                                string bankRefNo = Convert.ToString(ds.Tables[0].Rows[0]["bankRefNo"]);
+                                string paymentMode = Convert.ToString(ds.Tables[0].Rows[0]["paymentMode"]);
+                                string orderStatus = Convert.ToString(ds.Tables[0].Rows[0]["orderStatus"]);
+                                string amount = Convert.ToString(ds.Tables[0].Rows[0]["amount"]);
+                                string transDate = Convert.ToString(ds.Tables[0].Rows[0]["transDate"]);
+                                string paymentType = Convert.ToString(ds.Tables[0].Rows[0]["paymentType"]);
+                                string merchantType = Convert.ToString(ds.Tables[0].Rows[0]["merchantType"]);
+
+                                string ORDERID = Convert.ToString(ds.Tables[0].Rows[0]["ORDERID"]);
+
+                                log.Append("GET SHIMLA Request : " + Environment.NewLine
+                                                                    + "consumerId: " + consumerId + Environment.NewLine
+                                                                    + "billNo: " + billNo + Environment.NewLine
+                                                                    + "trackingId: " + trackingId + Environment.NewLine
+                                                                    + "bankRefNo: " + bankRefNo + Environment.NewLine
+                                                                    + "paymentMode: " + paymentMode + Environment.NewLine
+                                                                    + "orderStatus: " + orderStatus + Environment.NewLine
+                                                                    + "amount: " + amount + Environment.NewLine
+                                                                    + "transDate: " + transDate + Environment.NewLine
+                                                                    + "paymentType: " + paymentType + Environment.NewLine
+                                                                    + "merchantType: " + merchantType + Environment.NewLine
+                                                                    + "ORDERID: " + ORDERID + Environment.NewLine
+                                                                    + Environment.NewLine);
+
+                                PRSHIMLA.consumerId = consumerId;
+                                PRSHIMLA.billNo = billNo;
+                                PRSHIMLA.trackingId = trackingId;
+                                PRSHIMLA.bankRefNo = bankRefNo;
+                                PRSHIMLA.paymentMode = paymentMode;
+                                PRSHIMLA.orderStatus = orderStatus;
+                                PRSHIMLA.amount = amount;
+                                PRSHIMLA.transDate = transDate;
+                                PRSHIMLA.paymentType = paymentType;
+                                PRSHIMLA.merchantType = merchantType;
+
+                            }
+                            else if (BillerId.ToUpper() == "BHAR00000NATR4")
+                            {
+                                log.Append("-------------------------------------------------------------------------------" + Environment.NewLine);
+
+                                string npci_biller_id = Convert.ToString(ds.Tables[0].Rows[0]["npci_biller_id"]);
+                                string Partner_Trans_ID = Convert.ToString(ds.Tables[0].Rows[0]["Partner_Trans_ID"]);
+                                string Dist_Ref_No = Convert.ToString(ds.Tables[0].Rows[0]["Dist_Ref_No"]);
+                                string LPG_ID = Convert.ToString(ds.Tables[0].Rows[0]["LPG_ID"]);
+                                string Contact_Number = Convert.ToString(ds.Tables[0].Rows[0]["Contact_Number"]);
+                                string Payment_Method = Convert.ToString(ds.Tables[0].Rows[0]["Payment_Method"]);
+                                string Payment_Date = Convert.ToString(ds.Tables[0].Rows[0]["Payment_Date"]);
+                                string Order_Amount = Convert.ToString(ds.Tables[0].Rows[0]["Order_Amount"]);
+                                string Collected_Amount = Convert.ToString(ds.Tables[0].Rows[0]["Collected_Amount"]);
+                                string Settlement_Amount = Convert.ToString(ds.Tables[0].Rows[0]["Settlement_Amount"]);
+                                string API_Req_No = Convert.ToString(ds.Tables[0].Rows[0]["API_Req_No"]);
+                                string addl1 = Convert.ToString(ds.Tables[0].Rows[0]["addl1"]);
+                                string addl2 = Convert.ToString(ds.Tables[0].Rows[0]["addl2"]);
+                                string addl3 = Convert.ToString(ds.Tables[0].Rows[0]["addl3"]);
+
+                                log.Append("GET BPCL Request : " + Environment.NewLine
+                                                                    + "npci_biller_id: " + npci_biller_id + Environment.NewLine
+                                                                    + "Partner_Trans_ID: " + Partner_Trans_ID + Environment.NewLine
+                                                                    + "Dist_Ref_No: " + Dist_Ref_No + Environment.NewLine
+                                                                    + "LPG_ID: " + LPG_ID + Environment.NewLine
+                                                                    + "Contact_Number: " + Contact_Number + Environment.NewLine
+                                                                    + "Payment_Method: " + Payment_Method + Environment.NewLine
+                                                                    + "Payment_Date: " + Payment_Date + Environment.NewLine
+                                                                    + "Order_Amount: " + Order_Amount + Environment.NewLine
+                                                                    + "Collected_Amount: " + Collected_Amount + Environment.NewLine
+                                                                    + "Settlement_Amount: " + Settlement_Amount + Environment.NewLine
+                                                                    + "API_Req_No: " + API_Req_No + Environment.NewLine
+                                                                    + "addl1: " + addl1 + Environment.NewLine
+                                                                    + "addl2: " + addl2 + Environment.NewLine
+                                                                    + "addl3: " + addl3 + Environment.NewLine
+                                                                    + Environment.NewLine);
+
+                                PRBPCL.npci_biller_id = npci_biller_id;
+                                PRBPCL.Partner_Trans_ID = Partner_Trans_ID;
+                                PRBPCL.Dist_Ref_No = Dist_Ref_No;
+                                PRBPCL.LPG_ID = LPG_ID;
+                                PRBPCL.Contact_Number = Contact_Number;
+                                PRBPCL.Payment_Method = Payment_Method;
+                                PRBPCL.Payment_Date = Payment_Date;
+                                PRBPCL.Order_Amount = Order_Amount;
+                                PRBPCL.Collected_Amount = Collected_Amount;
+                                PRBPCL.Settlement_Amount = Settlement_Amount;
+                                PRBPCL.API_Req_No = API_Req_No;
+                                PRBPCL.addl1 = addl1;
+                                PRBPCL.addl2 = addl2;
+                                PRBPCL.addl3 = addl3;
+                            }
+                            else if (BillerId.ToUpper() == "FIVE00000NAT88")//FiveStar
+                            {
+                                log.Append("-------------------------------------------------------------------------------" + Environment.NewLine);
+
+                                string loanNumber = Convert.ToString(ds.Tables[0].Rows[0]["loanNumber"]);
+                                string transactionDateTime = Convert.ToString(ds.Tables[0].Rows[0]["transactionDateTime"]);
+                                string valueDate = Convert.ToString(ds.Tables[0].Rows[0]["valueDate"]);
+                                string transactionAmount = Convert.ToString(ds.Tables[0].Rows[0]["transactionAmount"]);
+                                string paymentId = Convert.ToString(ds.Tables[0].Rows[0]["paymentId"]);
+                                string refId = Convert.ToString(ds.Tables[0].Rows[0]["refId"]);
+                                string mobileNo = Convert.ToString(ds.Tables[0].Rows[0]["mobileNo"]);
+                                string customerName = Convert.ToString(ds.Tables[0].Rows[0]["customerName"]);
+                                string paymentApp = Convert.ToString(ds.Tables[0].Rows[0]["paymentApp"]);
+                                string status = Convert.ToString(ds.Tables[0].Rows[0]["status"]);
+                                string issuerBank = Convert.ToString(ds.Tables[0].Rows[0]["issuerBank"]);
+                                string upiId = Convert.ToString(ds.Tables[0].Rows[0]["upiId"]);
+                                string bbpsId = Convert.ToString(ds.Tables[0].Rows[0]["bbpsId"]);
+                                string intermediaryId = Convert.ToString(ds.Tables[0].Rows[0]["intermediaryId"]);
+
+                                log.Append("GET Request : " + Environment.NewLine
+                                                            + "loanNumber: " + loanNumber + Environment.NewLine
+                                                            + "transactionDateTime: " + transactionDateTime + Environment.NewLine
+                                                            + "valueDate: " + valueDate + Environment.NewLine
+                                                            + "transactionAmount: " + transactionAmount + Environment.NewLine
+                                                            + "paymentId: " + paymentId + Environment.NewLine
+                                                            + "refId: " + refId + Environment.NewLine
+                                                            + "mobileNo: " + mobileNo + Environment.NewLine
+                                                            + "customerName: " + customerName + Environment.NewLine
+                                                            + "paymentApp: " + paymentApp + Environment.NewLine
+                                                            + "status: " + status + Environment.NewLine
+                                                            + "issuerBank: " + issuerBank + Environment.NewLine
+                                                            + "upiId: " + upiId + Environment.NewLine
+                                                            + "bbpsId: " + bbpsId + Environment.NewLine
+                                                            + "intermediaryId: " + intermediaryId + Environment.NewLine
+                                                            + Environment.NewLine);
+
+                                PRFiveStr.loanNumber = loanNumber;
+                                PRFiveStr.transactionDateTime = transactionDateTime;
+                                PRFiveStr.valueDate = valueDate;
+                                PRFiveStr.transactionAmount = transactionAmount;
+                                PRFiveStr.paymentId = paymentId;
+                                PRFiveStr.refId = refId;
+                                PRFiveStr.mobileNo = mobileNo;
+                                PRFiveStr.customerName = customerName;
+                                PRFiveStr.paymentApp = paymentApp;
+                                PRFiveStr.status = status;
+                                PRFiveStr.issuerBank = issuerBank;
+                                PRFiveStr.upiId = upiId;
+                                PRFiveStr.bbpsId = bbpsId;
+                                PRFiveStr.intermediaryId = intermediaryId;
+                            }
+                            else if (BillerId.ToUpper() == "BHAR00000NATB4") // BPCL Commercial
+                            {
+                                log.Append("-------------------------------------------------------------------------------" + Environment.NewLine);
+
+                                string npci_biller_id = Convert.ToString(ds.Tables[0].Rows[0]["npci_biller_id"]);
+                                string Partner_Trans_ID = Convert.ToString(ds.Tables[0].Rows[0]["Partner_Trans_ID"]);
+                                string Dist_Ref_No = Convert.ToString(ds.Tables[0].Rows[0]["Dist_Ref_No"]);
+                                string LPG_ID = Convert.ToString(ds.Tables[0].Rows[0]["LPG_ID"]);
+                                string Contact_Number = Convert.ToString(ds.Tables[0].Rows[0]["Contact_Number"]);
+                                string Payment_Method = Convert.ToString(ds.Tables[0].Rows[0]["Payment_Method"]);
+                                string Payment_Date = Convert.ToString(ds.Tables[0].Rows[0]["Payment_Date"]);
+                                string Order_Amount = Convert.ToString(ds.Tables[0].Rows[0]["Order_Amount"]);
+                                string Collected_Amount = Convert.ToString(ds.Tables[0].Rows[0]["Collected_Amount"]);
+                                string Settlement_Amount = Convert.ToString(ds.Tables[0].Rows[0]["Settlement_Amount"]);
+                                string API_Req_No = Convert.ToString(ds.Tables[0].Rows[0]["API_Req_No"]);
+                                string addl1 = Convert.ToString(ds.Tables[0].Rows[0]["addl1"]);
+                                string addl2 = Convert.ToString(ds.Tables[0].Rows[0]["addl2"]);
+                                string addl3 = Convert.ToString(ds.Tables[0].Rows[0]["addl3"]);
+
+                                log.Append("GET BPCL Commercial Request : " + Environment.NewLine
+                                                                    + "npci_biller_id: " + npci_biller_id + Environment.NewLine
+                                                                    + "Partner_Trans_ID: " + Partner_Trans_ID + Environment.NewLine
+                                                                    + "Dist_Ref_No: " + Dist_Ref_No + Environment.NewLine
+                                                                    + "LPG_ID: " + LPG_ID + Environment.NewLine
+                                                                    + "Contact_Number: " + Contact_Number + Environment.NewLine
+                                                                    + "Payment_Method: " + Payment_Method + Environment.NewLine
+                                                                    + "Payment_Date: " + Payment_Date + Environment.NewLine
+                                                                    + "Order_Amount: " + Order_Amount + Environment.NewLine
+                                                                    + "Collected_Amount: " + Collected_Amount + Environment.NewLine
+                                                                    + "Settlement_Amount: " + Settlement_Amount + Environment.NewLine
+                                                                    + "API_Req_No: " + API_Req_No + Environment.NewLine
+                                                                    + "addl1: " + addl1 + Environment.NewLine
+                                                                    + "addl2: " + addl2 + Environment.NewLine
+                                                                    + "addl3: " + addl3 + Environment.NewLine
+                                                                    + Environment.NewLine);
+
+                                PRBPCL.npci_biller_id = npci_biller_id;
+                                PRBPCL.Partner_Trans_ID = Partner_Trans_ID;
+                                PRBPCL.Dist_Ref_No = Dist_Ref_No;
+                                PRBPCL.LPG_ID = LPG_ID;
+                                PRBPCL.Contact_Number = Contact_Number;
+                                PRBPCL.Payment_Method = Payment_Method;
+                                PRBPCL.Payment_Date = Payment_Date;
+                                PRBPCL.Order_Amount = Order_Amount;
+                                PRBPCL.Collected_Amount = Collected_Amount;
+                                PRBPCL.Settlement_Amount = Settlement_Amount;
+                                PRBPCL.API_Req_No = API_Req_No;
+                                PRBPCL.addl1 = addl1;
+                                PRBPCL.addl2 = addl2;
+                                PRBPCL.addl3 = addl3;
+                            }
+
+                            else
+                            {
+                                ds.Tables[0].Columns.Remove("ORDERID");
+                            }
+
+                            if (BillerId == "INDI00000NATYG")
+                            {
+                                encryptedRequestbody = JsonConvert.SerializeObject(PR);
+                            }
+                            else if (BillerId.ToUpper() == "VAST00000NATLW")
+                            {
+                                Requestbody = JsonConvert.SerializeObject(PRV);
+                            }
+                            else if (BillerId.ToUpper() == "SVAT00000NATUB")
+                            {
+                                Requestbody = JsonConvert.SerializeObject(PRS);
+                            }
+                            else if (BillerId.ToUpper() == "INDU00000NATQH")
+                            {
+                                Requestbody = JsonConvert.SerializeObject(PRCFD);
+                            }
+                            else if (BillerId.ToUpper() == "INDI00000NAT12")
+                            {
+                                Requestbody = JsonConvert.SerializeObject(PRIS);
+                            }
+                            else if (BillerId.ToUpper() == "BHAR00000NAT52")
+                            {
+                                Requestbody = JsonConvert.SerializeObject(PRC);
+                            }
+                            else if (BillerId.ToUpper() == "HDBF00000NATGJ")
+                            {
+                                Requestbody = JsonConvert.SerializeObject(PRHDBF);
+                            }
+                            else if (BillerId.ToUpper() == "SATI00000NATB1")
+                            {
+                                Requestbody = JsonConvert.SerializeObject(PRSATIN);
+                            }
+                            else if (BillerId.ToUpper() == "ADIT00000NATZ1")
+                            {
+                                Requestbody = JsonConvert.SerializeObject(PABFL);
+                            }
+                            else if (BillerId.ToUpper() == "BELS00000NATD7")
+                            {
+                                Requestbody = JsonConvert.SerializeObject(PRBEL);
+                            }
+                            else if (BillerId.ToUpper() == "BAJA00000NATDK")
+                            {
+                                Requestbody = JsonConvert.SerializeObject(PRBHFL);
+                            }
+                            else if (BillerId.ToUpper() == "SHIM00000SHM5C")
+                            {
+                                Requestbody = JsonConvert.SerializeObject(PRSHIMLA);
+                            }
+                            else if (BillerId.ToUpper() == "BHAR00000NATR4")
+                            {
+                                Requestbody = JsonConvert.SerializeObject(PRBPCL);
+                            }
+                            else if (BillerId.ToUpper() == "FIVE00000NAT88")//FiveStar
+                            {
+                                Requestbody = JsonConvert.SerializeObject(PRFiveStr);
+                            }
+                            else if (BillerId.ToUpper() == "BHAR00000NATB4")
+                            {
+                                Requestbody = JsonConvert.SerializeObject(PRBPCL);
+                            }
+                            else
+                            {
+                                log.Append("-------------------------------------------------------------------------------" + Environment.NewLine);
+
+
+                                _formdatasb = Helper.GetJsonData(ds, log);
+
+                                if (input["BillerParam"].ContainsKey("ISJsonArray"))
+                                {
+                                    string isJsonArray = input["BillerParam"]["ISJsonArray"] != null ? Convert.ToString(input["BillerParam"]["ISJsonArray"]) : "";
+                                    if (isJsonArray == "TRUE")
+                                    {
+                                        _formdatasb = "[" + _formdatasb + "]";
+                                    }
+                                }
+                                ContentType = "application/json";
+                                input["BillerParam"]["ContentType"] = ContentType;
+                                input["BillerParam"]["Body"] = _formdatasb;
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    input["BillerParam"]["RefId"] = RefId;
+                    string strContentType = Convert.ToString(input["BillerParam"]["ContentType"]);
+                    ContentType = string.Format(strContentType);
+                    input["BillerParam"]["ContentType"] = ContentType;
+                    input["BillerParam"]["Body"] = xmldata;
+                }
+                if (BillerId == "INDI00000NATYG")
+                {
+                    output = await Helper.POSTIndiaBullHsg(encryptedRequestbody, input["BillerParam"]["RefId"].ToString(),
+                                                        ReqParam["BillerBillFetchURL"].ToString(), input, log, Settings.NetworkCred.IndiaBullHsgUsername, Settings.NetworkCred.IndiaBullHsgPassword);
+                }
+                else if (BillerId == "VAST00000NATLW")
+                {
+                    output = await Helper.POSTVastuHsg(Requestbody, input["BillerParam"]["RefId"].ToString(), ReqParam["BillerBillFetchURL"].ToString(), log,
+                                                   Settings.NetworkCred.VastuHsgUsername, Settings.NetworkCred.VastuHsgPassword);
+                }
+                else if (BillerId == "SVAT00000NATUB")
+                {
+                    output = await Helper.POSTSvatantra(Requestbody, input["BillerParam"]["RefId"].ToString(), ReqParam["BillerBillFetchURL"].ToString(), input, log);
+
+                }
+                else if (BillerId == "INDU00000NATQH")
+                {
+                    output = await Helper.POSTCFD(Requestbody, input["BillerParam"]["RefId"].ToString(), ReqParam["BillerBillFetchURL"].ToString(), input, log);
+
+                }
+                else if (BillerId == "INDI00000NAT12")
+                {
+
+                    string BillerToken = await dbService.GetBillerToken("INDI00000NAT12");
+                    output = await Helper.POSTIndiaShelter(Requestbody, input["BillerParam"]["RefId"].ToString(), ReqParam["BillerBillFetchURL"].ToString(), input, BillerToken, log);
+
+                }
+                else if (BillerId == "BHAR00000NAT52")
+                {
+                    output = await Helper.POSTBFIL(Requestbody, input["BillerParam"]["RefId"].ToString(), ReqParam["BillerBillFetchURL"].ToString(), input["BillerParam"]["username"].ToString(), input["BillerParam"]["password"].ToString(), log);
+                }
+                else if (BillerId == "SATI00000NATB1")
+                {
+                    output = await Helper.POSTSATIN(Requestbody, input["BillerParam"]["RefId"].ToString(), ReqParam["BillerBillFetchURL"].ToString(), log);
+
+                }
+                else if (BillerId == "HDBF00000NATGJ")
+                {
+                    log.Append("Before Calling POSTHDBFinance" + Environment.NewLine);
+                    string BillerToken = await dbService.GetBillerToken("HDBF00000NATGJ");
+                    output = await Helper.POSTHDBFinance(Requestbody, input["BillerParam"]["RefId"].ToString(), ReqParam["BillerBillFetchURL"].ToString(), BillerToken, log);
+                }
+                else if (BillerId == "ADIT00000NATZ1")
+                {
+                    log.Append("Before Calling ABFL" + Environment.NewLine);
+                    string BillerToken = await dbService.GetBillerToken("ADIT00000NATZ1");
+                    output = await Helper.POSTABFL(Requestbody, input["BillerParam"]["RefId"].ToString(), ReqParam["BillerBillFetchURL"].ToString(), BillerToken, log, AuthorizationABFL);
+
+                }
+                else if (BillerId == "BELS00000NATD7")
+                {
+                    output = await Helper.POSTBelStar(Requestbody, input["BillerParam"]["RefId"].ToString(), ReqParam["BillerBillFetchURL"].ToString(), log);
+                }
+                else if (BillerId == "BAJA00000NATDK")
+                {
+                    output = await Helper.POSTBHFL(Requestbody, input["BillerParam"]["RefId"].ToString(), ReqParam["BillerBillFetchURL"].ToString(), log);
+                }
+                else if (BillerId == "SHIM00000SHM5C")
+                {
+                    output = await Helper.POSTSHIMLA(Requestbody, input["BillerParam"]["RefId"].ToString(), ReqParam["BillerBillFetchURL"].ToString(), log);
+                }
+                else if (BillerId == "BHAR00000NATR4")
+                {
+                    output = await Helper.POSTBPCL(Requestbody, input["BillerParam"]["RefId"].ToString(), ReqParam["BillerBillFetchURL"].ToString(), log);
+                }
+                else if (BillerId == "FIVE00000NAT88")//FiveStar
+                {
+                    output = await Helper.POSTFIVESTAR(Requestbody, input["BillerParam"]["RefId"].ToString(), ReqParam["BillerBillFetchURL"].ToString(), log);
+                }
+                else if (BillerId == "BHAR00000NATB4")//BPCL Commercial
+                {
+                    output = await Helper.POSTBPCLCommercial(Requestbody, input["BillerParam"]["RefId"].ToString(), ReqParam["BillerBillFetchURL"].ToString(), log);
+                }
+                else
+                {
+                    output = await Helper.GET(input, log, ConfigXML, Settings.TLSVersion, Settings.CertFilePath);
+                }
+            }
+            else if (AuthenticationMode == "TOKENAUTH")
+            {
+                input.Add("RequestHeaders", new Dictionary<string, object>());
+
+                dsResult = dbService.GetRequestParams(RefId);
+
+                Dictionary<string, string> ReqParam;
+                string xmlobjDsResult = dsResult.GetXml();
+
+                ReqParam = await dbService.AddRequestParam(xmlobjDsResult, Address, BillerId);
+                xmldata = ReqParam["Xmldata"].ToString();
+                input["BillerParam"].Add("Address", ReqParam["BillerBillFetchURL"]);
+                input["BillerParam"]["RefId"] = RefId;
+                input["BillerParam"]["Body"] = xmldata;
+                output = await Helper.POST(input, log);
+
+            }
+            else
+            {
+
+                input.Add("ResponseHeaders", new Dictionary<string, object>());
+
+                Body = BR.Body;
+
+                foreach (XElement Biller in XElement.Load(ConfigXML).Elements("Billers").Where(k => k.FirstAttribute.Value == BillerId))
+                {
+                    foreach (XElement Element in Biller.Elements("RequestHeaders"))
+                    {
+                        foreach (XElement Elements in Element.Elements("Header"))
+                        {
+                            input["BillerParam"].Add(Convert.ToString(Elements.FirstAttribute.Name), Elements.FirstAttribute.Value);
+                        }
+                    }
+                }
+
+                AuthenticationMode = Convert.ToString(input["BillerParam"]["AuthenticationMode"]).ToUpper();
+
+                dsResult = dbService.GetRequestParams(RefId);
+
+                if (dsResult.Tables[0]?.Rows.Count > 0)
+                {
+                    Dictionary<string, string> ReqParam;
+                    string xmlobjDsResult = dsResult.GetXml();
+                    ReqParam = await dbService.AddRequestParam(xmlobjDsResult, Address, BillerId);
+
+                    xmldata = ReqParam["Xmldata"].ToString();
+                    input["BillerParam"].Add("Address", ReqParam["BillerBillFetchURL"]);
+                }
+
+                output = await Helper.GETToken(input, log, ConfigXML);
+
+                if (Convert.ToString(output["X-CSRF-Token"]) != "")
+                {
+                    foreach (XElement Biller in XElement.Load(ConfigXML).Elements("Billers").Where(k => k.FirstAttribute.Value == BillerId))
+                    {
+                        foreach (XElement Element in Biller.Element("ResponseHeaders").Elements("Header"))
+                        {
+                            input["ResponseHeaders"].Add(Convert.ToString(Element.FirstAttribute.Name), Convert.ToString(Element.FirstAttribute.Value));
+                        }
+                    }
+
+                    input["BillerParam"]["RefId"] = RefId;
+                    ContentType = "application/xml";
+                    input["BillerParam"]["ContentType"] = ContentType;
+                    input["BillerParam"]["Method"] = input["BillerParam"]["Method2"];
+                    input["BillerParam"]["Body"] = xmldata;
+                    input["ResponseHeaders"]["X-CSRF-Token"] = output["X-CSRF-Token"];
+
+
+                    output = await Helper.GET(input, log, ConfigXML, Settings.TLSVersion, Settings.CertFilePath);
+                }
+            }
+            log.Append($"{string.Join(Environment.NewLine,output)}");
+            log.Append("Pay utility execution completed : " + Environment.NewLine);
+            log.Append("-------------------------------------------------------------------------------- " + Environment.NewLine);
+        }
