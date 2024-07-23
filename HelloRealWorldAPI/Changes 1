@@ -1,0 +1,259 @@
+Here is the complete refactored code including all the helper methods and enums:
+
+### Enums
+We'll create enums for `AggregatorName` and `AuthenticationMode`.
+
+### Helper Methods
+We'll create helper methods for:
+- Logging
+- Initializing pay request objects
+- Processing different aggregators
+
+### Common Methods
+We'll create common methods for:
+- Fetching XML data
+- Processing dataset rows
+
+### Complete Refactored Code
+
+```csharp
+using System;
+using System.Collections.Generic;
+using System.Data;
+using System.IO;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+using System.Xml.Linq;
+
+public enum AggregatorName
+{
+    Unknown,
+    Jupiter,
+    IndoStar,
+    IndoStarIHFL,
+    NASDigital,
+    Nupay
+}
+
+public enum AuthenticationMode
+{
+    Unknown,
+    Aggregator
+}
+
+public class BillPaymentProcessor
+{
+    private readonly IDbService dbService;
+
+    public BillPaymentProcessor(IDbService dbService)
+    {
+        this.dbService = dbService;
+    }
+
+    public async Task ProcessInstaBillPayment(BillerRecord BR, StringBuilder log)
+    {
+        Log(log, "ProcessInstaBillPayment Started");
+
+        var payRequests = InitializePayRequests();
+
+        string BillerId = BR.BillerId,
+               Address = BR.Address,
+               Body = BR.Body,
+               RefId = BR.RefId,
+               AggregatorModel = BR.AggregatorModel,
+               AggregatorID = BR.AggregatorID,
+               AggregatorName = BR.AggregatorName;
+
+        Log(log, $"Bill Pay Utility invoked for {BillerId}");
+
+        var input = new Dictionary<string, Dictionary<string, object>> {
+            { "BillerParam", new Dictionary<string, object>() }
+        };
+
+        foreach (XElement Biller in XElement.Load(ConfigXML).Elements("Billers").Where(k => k.FirstAttribute.Value == BillerId))
+        {
+            foreach (XElement Element in Biller.Elements("Biller"))
+            {
+                input["BillerParam"].Add(Element.FirstAttribute.Name.ToString(), Element.FirstAttribute.Value);
+            }
+        }
+        input["BillerParam"].Add("Body", Body);
+        input["BillerParam"].Add("BillerId", BillerId);
+
+        var authenticationMode = Enum.TryParse(input["BillerParam"]["AuthenticationMode"].ToString(), true, out AuthenticationMode mode) ? mode : AuthenticationMode.Unknown;
+
+        if (AggregatorModel == "1" && authenticationMode == AuthenticationMode.Aggregator)
+        {
+            input.Add("RequestHeaders", new Dictionary<string, object>());
+
+            var dsResult = dbService.GetRequestParams(RefId);
+            var xmlobjDsResult = dsResult.GetXml();
+
+            var reqParam = HelperAggregator.AddRequestParamAggregator(xmlobjDsResult, Address, BillerId, out var xmldata, log, AggregatorID, AggregatorName);
+
+            input["BillerParam"].Add("Address", reqParam["BillerBillFetchURL"]);
+
+            if (input["BillerParam"]["ContentType"].ToString() == "application/json")
+            {
+                using (var sr = new StringReader(xmldata))
+                {
+                    var ds = new DataSet();
+                    ds.ReadXml(sr);
+
+                    if (ds.Tables.Count > 0 && ds.Tables[0].Rows.Count > 0)
+                    {
+                        input["BillerParam"]["RefId"] = ds.Tables[0].Rows[0]["ORDERID"].ToString();
+                        ProcessAggregator(log, ds.Tables[0].Rows[0], AggregatorName, payRequests);
+                    }
+                }
+            }
+        }
+    }
+
+    private static Dictionary<string, object> InitializePayRequests()
+    {
+        return new Dictionary<string, object>
+        {
+            { "Jupiter", new PayRequestJupiter() },
+            { "IndoStar", new PayRequestIndoStar() },
+            { "IndoStarIHFL", new PayRequestIndoStarIhfl() },
+            { "NASDigital", new PayRequestNasDigital() },
+            { "NupayCriss", new PayRequestNupayCriss() },
+            { "Vastu", new PayRequestVastu() },
+            { "ConfirmationRequestBfil", new ConfirmationRequestBfil() },
+            { "Svatantra", new PayRequestSvatantra() },
+            { "Cfd", new PayRequestCfd() },
+            { "IndiaShelter", new PayRequestIndiaShelter() },
+            { "Hdbf", new PayRequestHdbf() },
+            { "Bhfl", new PayRequestBhfl() },
+            { "Satin", new PayRequestSatin() },
+            { "Abfl", new PayRequestAbfl() },
+            { "BelStar", new PayRequestBelStar() },
+            { "Shimla", new PayRequestShimla() },
+            { "Bpcl", new PayRequestBpcl() },
+            { "FiveStar", new PayRequestFiveStar() }
+        };
+    }
+
+    private static void Log(StringBuilder log, string message)
+    {
+        log.AppendLine(message);
+    }
+
+    private void ProcessAggregator(StringBuilder log, DataRow row, string aggregatorName, Dictionary<string, object> payRequests)
+    {
+        var aggregator = Enum.TryParse(aggregatorName, true, out AggregatorName name) ? name : AggregatorName.Unknown;
+
+        switch (aggregator)
+        {
+            case AggregatorName.Jupiter:
+                ProcessJupiter(log, row, (PayRequestJupiter)payRequests["Jupiter"]);
+                break;
+            case AggregatorName.IndoStar:
+                ProcessIndoStar(log, row, (PayRequestIndoStar)payRequests["IndoStar"]);
+                break;
+            case AggregatorName.IndoStarIHFL:
+                ProcessIndoStarIHFL(log, row, (PayRequestIndoStarIhfl)payRequests["IndoStarIHFL"]);
+                break;
+            case AggregatorName.NASDigital:
+                ProcessNASDigital(log, row, (PayRequestNasDigital)payRequests["NASDigital"]);
+                break;
+            case AggregatorName.Nupay:
+                ProcessNupayCriss(log, row, (PayRequestNupayCriss)payRequests["NupayCriss"]);
+                break;
+            default:
+                Log(log, $"Unknown Aggregator: {aggregatorName}");
+                break;
+        }
+    }
+
+    private void ProcessJupiter(StringBuilder log, DataRow row, PayRequestJupiter request)
+    {
+        request.TxnRefID = row["TxnRefID"].ToString();
+        request.RefID = row["RefID"].ToString();
+        request.StudendtID = row["StudendtID"].ToString();
+        request.BillAmount = row["BillAmount"].ToString();
+        request.PayReceive = row["PayReceive"].ToString();
+        request.BillerId = row["BillerId"].ToString();
+        request.PaymentMode = row["PaymentMode"].ToString();
+
+        Log(log, $"GET CollectionConfirmation JupiterOrison Request : {Environment.NewLine}" +
+                 $"TxnRefID: {request.TxnRefID} {Environment.NewLine}" +
+                 $"RefID: {request.RefID} {Environment.NewLine}" +
+                 $"StudendtID: {request.StudendtID} {Environment.NewLine}" +
+                 $"BillAmount: {request.BillAmount} {Environment.NewLine}" +
+                 $"PayReceive: {request.PayReceive} {Environment.NewLine}" +
+                 $"BillerId: {request.BillerId} {Environment.NewLine}" +
+                 $"PaymentMode: {request.PaymentMode} {Environment.NewLine}");
+    }
+
+    private void ProcessIndoStar(StringBuilder log, DataRow row, PayRequestIndoStar request)
+    {
+        request.PaymentStatus = row["PaymentStatus"].ToString();
+        request.LoanNumber = row["LoanNumber"].ToString();
+        request.AmountPaid = row["AmountPaid"].ToString();
+        request.TransactionDate = row["TransactionDate"].ToString();
+        request.TransactionNo1 = row["TransactionNo1"].ToString();
+        request.TransactionNo2 = row["TransactionNo2"].ToString();
+        request.FetchReferenceID = row["FetchReferenceID"].ToString();
+
+        Log(log, $"GET CollectionConfirmation IndoStar Request : {Environment.NewLine}" +
+                 $"PaymentStatus: {request.PaymentStatus} {Environment.NewLine}" +
+                 $"LoanNumber: {request.LoanNumber} {Environment.NewLine}" +
+                 $"AmountPaid: {request.AmountPaid} {Environment.NewLine}" +
+                 $"TransactionDate: {request.TransactionDate} {Environment.NewLine}" +
+                 $"TransactionNo1: {request.TransactionNo1} {Environment.NewLine}" +
+                 $"TransactionNo2: {request.TransactionNo2} {Environment.NewLine}" +
+                 $"FetchReferenceID: {request.FetchReferenceID} {Environment.NewLine}");
+    }
+
+    private void ProcessIndoStarIHFL(StringBuilder log, DataRow row, PayRequestIndoStarIhfl request)
+    {
+        request.userCredentials = new UserCredentials
+        {
+            userId = row["userId"].ToString(),
+            userPassword = row["userPassword"].ToString(),
+            source = row["source"].ToString()
+        };
+        request.loanNo = row["loanNo"].ToString();
+        request.receiptAmount = row["receiptAmount"].ToString();
+        request.receiptDateTime = row["receiptDateTime"].ToString();
+        request.requestRefId = row["requestRefId"].ToString();
+        request.transactionNpci = row["transactionNpci"].ToString();
+        request.transactionIbl = row["transactionIbl"].ToString();
+
+        Log(log, $"GET CollectionConfirmation IndoStarIHFL Request : {Environment.NewLine}" +
+                 $"userId: {request.userCredentials.userId} {Environment.NewLine}" +
+
+
+
+
+
+
+private void ProcessIndoStarIHFL(StringBuilder log, DataRow row, PayRequestIndoStarIhfl request)
+{
+    request.userCredentials = new UserCredentials
+    {
+        userId = row["userId"].ToString(),
+        userPassword = row["userPassword"].ToString(),
+        source = row["source"].ToString()
+    };
+    request.loanNo = row["loanNo"].ToString();
+    request.receiptAmount = row["receiptAmount"].ToString();
+    request.receiptDateTime = row["receiptDateTime"].ToString();
+    request.requestRefId = row["requestRefId"].ToString();
+    request.transactionNpci = row["transactionNpci"].ToString();
+    request.transactionIbl = row["transactionIbl"].ToString();
+
+    Log(log, $"GET CollectionConfirmation IndoStarIHFL Request : {Environment.NewLine}" +
+             $"userId: {request.userCredentials.userId} {Environment.NewLine}" +
+             $"userPassword: {request.userCredentials.userPassword} {Environment.NewLine}" +
+             $"source: {request.userCredentials.source} {Environment.NewLine}" +
+             $"loanNo: {request.loanNo} {Environment.NewLine}" +
+             $"receiptAmount: {request.receiptAmount} {Environment.NewLine}" +
+             $"receiptDateTime: {request.receiptDateTime} {Environment.NewLine}" +
+             $"requestRefId: {request.requestRefId} {Environment.NewLine}" +
+             $"transactionNpci: {request.transactionNpci} {Environment.NewLine}" +
+             $"transactionIbl: {request.transactionIbl} {Environment.NewLine}");
+}
