@@ -1,0 +1,108 @@
+ public async Task<XElement> BOUTxnStatus(string RefId, XElement BOUTxnStatusRequest)
+ {
+     string strBOUTxnStatusRequest = Convert.ToString(BOUTxnStatusRequest);
+     string strAck = "<ns2:Ack xmlns:ns2 = \"http://bbps.org/schema\" api = \"TxnStatusRequest\" refId =\"" + RefId + "\"" + " RspCd =\"Faliure\" ts=\"" + DateTime.Now.ToString("yyyy-MM-ddTHH:mm:ss+5:30") + "\" />";
+     string MsgCode = string.Empty;
+     PendingStatusRequest PendingStatusRequest = new();
+
+     int BOUCommandTimeout = Convert.ToInt32(mySettings.BOUCommandTimeOut);
+     StringBuilder LoggingMsg = new StringBuilder();
+     try
+     {
+         XmlDocument XmlDoc = new XmlDocument();
+         XmlDoc.XmlResolver = null; // Added for fixing Improper Restriction of XXE Ref Vulnerability Issue
+         XmlDoc.LoadXml(strBOUTxnStatusRequest);
+
+         //Note:Verify XML Signature
+         bool IsValidSign = false;
+         try
+         {
+             IsValidSign = Common.VerifySignature(XmlDoc, ref LoggingMsg);
+             LoggingMsg.Append("IsValidSign: \t " + IsValidSign);
+
+             if (!IsValidSign)
+             {
+                 MsgCode = mySettings.SignMisMatchlCode;
+                 LoggingMsg.Append("Invalid Signature \t" + MsgCode);
+                 // should return from here
+             }
+         }
+         catch (Exception ex)
+         {
+             MsgCode = mySettings.SignErrorCode;
+             _errlogger.Info("\nMessage BOUTxnStatus  Exception: " + Convert.ToString(ex.Message) + "Exception at " + DateTime.Now.ToLongDateString());
+             _errlogger.Info("\nSource BOUTxnStatus  Exception: " + Convert.ToString(ex.Source) + "Exception at " + DateTime.Now.ToLongDateString());
+             _errlogger.Info("\nStackTrace BOUTxnStatus  Exception: " + Convert.ToString(ex.StackTrace) + "Exception at " + DateTime.Now.ToLongDateString());
+
+             strAck = "<ns2:Ack xmlns:ns2 = \"http://bbps.org/schema\" api = \"TxnStatusRequest\" refId =\"" + RefId + "\"" + " RspCd =\"Failure\" ts=\"" + DateTime.Now.ToString("yyyy-MM-ddTHH:mm:ss+5:30") + "\" />";
+         }
+
+         LoggingMsg.Append(Environment.NewLine + "blnIsValidSign \t" + IsValidSign + DateTime.Now.ToString("MM/dd/yyyy HH:mm:ss") + Environment.NewLine);
+         LoggingMsg.Append("DB Call Start " + DateTime.Now.ToString("MM/dd/yyyy HH:mm:ss"));
+
+         DataSet objDsResult = await objBl.fnBOUTxnStatusRequest(strBOUTxnStatusRequest, _conStr, BOUCommandTimeout);
+
+         LoggingMsg.Append(Environment.NewLine + "DB Call End " + DateTime.Now.ToString("MM/dd/yyyy HH:mm:ss") + Environment.NewLine);
+         string strResult = string.Empty;
+
+         if (objDsResult != null && objDsResult.Tables.Count > 0)
+         {
+             if (objDsResult?.Tables[0]?.Rows.Count > 0)
+             {
+                 LoggingMsg.Append("strResult" + strResult + Environment.NewLine);
+                 LoggingMsg.Append("BOUTxn Status Request AckDateTime From DB" + DateTime.Now.ToString("MM/dd/yyyy HH:mm:ss") + Environment.NewLine);
+                 LoggingMsg.Append("strAck \t" + Convert.ToString(objDsResult.Tables[0].Rows[0]["@o_ack"]) + Environment.NewLine);
+
+                 strAck = Convert.ToString(objDsResult.Tables[0].Rows[0]["@o_ack"]);
+                 PendingStatusRequest.RefId = Convert.ToString(objDsResult.Tables[0].Rows[0]["@o_RefID"]);
+                 PendingStatusRequest.TxnRefId = Convert.ToString(objDsResult.Tables[0].Rows[0]["@o_TxnReferenceId"]);
+                 PendingStatusRequest.OrigInst = Convert.ToString(objDsResult.Tables[0].Rows[0]["@o_origInst"]);
+                 PendingStatusRequest.CategoryID = Convert.ToString(objDsResult.Tables[0].Rows[0]["@o_CategoryID"]);
+                 PendingStatusRequest.BillerID = Convert.ToString(objDsResult.Tables[0].Rows[0]["@o_BillerID"]);
+                 PendingStatusRequest.PayID = Convert.ToString(objDsResult.Tables[0].Rows[0]["@o_PayID"]);
+                 PendingStatusRequest.MsgId = Convert.ToString(objDsResult.Tables[0].Rows[0]["@o_MsgId"]);
+                 PendingStatusRequest.Response = Convert.ToString(objDsResult.Tables[0].Rows[0]["@o_Response"]);
+                 PendingStatusRequest.ResponseCode = Convert.ToString(objDsResult.Tables[0].Rows[0]["@o_ResponseCode"]);
+                 PendingStatusRequest.TrnId = Convert.ToString(objDsResult.Tables[0].Rows[0]["@o_TrnId"]);
+                 PendingStatusRequest.BillerToken = Convert.ToString(objDsResult.Tables[0].Rows[0]["@o_BillerToken"]);
+                 PendingStatusRequest.LpgId = Convert.ToString(objDsResult.Tables[0].Rows[0]["@o_LpgId"]);
+                 PendingStatusRequest.TxnStatusRequest = Convert.ToString(objDsResult.Tables[0].Rows[0]["@o_TxnStatusReq"]);
+             }
+             else
+             {
+                 LoggingMsg.Append(Environment.NewLine + "Error BOUTxn Status Request : No data received from SP");
+             }
+         }
+     }
+     catch
+     {
+         strAck = "<ns2:Ack xmlns:ns2 = \"http://bbps.org/schema\" api = \"TxnStatusRequest\" refId =\"" + RefId + "\"" + " RspCd =\"Faliure\" ts=\"" + DateTime.Now.ToString("yyyy-MM-ddTHH:mm:ss+5:30") + "\" />";
+     }
+     finally
+     {
+         if (string.IsNullOrEmpty(strAck))
+         {
+             strAck = "<ns2:Ack xmlns:ns2 = \"http://bbps.org/schema\" api = \"TxnStatusRequest\" refId =\"" + RefId + "\"" + " RspCd =\"Faliure\" ts=\"" + DateTime.Now.ToString("yyyy-MM-ddTHH:mm:ss+5:30") + "\" />";
+         }
+
+         LoggingMsg.Append(Environment.NewLine + "BOUTxn Status Request Ack send to CU " + strAck + Environment.NewLine);
+         LoggingMsg.Append(Environment.NewLine + "BOUTxn Status Request Ack " + DateTime.Now.ToString("MM/dd/yyyy HH:mm:ss") + Environment.NewLine);
+     }
+
+     if (PendingStatusRequest.TxnRefId != null)
+     {
+         LoggingMsg.Append(Environment.NewLine + "RefID: " + PendingStatusRequest.RefId +
+                           Environment.NewLine + "TxnReferenceId: " + PendingStatusRequest.TxnRefId +
+                           Environment.NewLine + "origInst: " + PendingStatusRequest.OrigInst +
+                           Environment.NewLine + "CategoryID: " + PendingStatusRequest.CategoryID +
+                           Environment.NewLine + "BillerID: " + PendingStatusRequest.BillerID +
+                           Environment.NewLine + "PayID: " + PendingStatusRequest.PayID +
+                           Environment.NewLine + "LoggingMsg: " + LoggingMsg +
+                           Environment.NewLine + "MsgId: " + PendingStatusRequest.MsgId +
+                           Environment.NewLine + "LpgId: " + PendingStatusRequest.LpgId);
+
+         Task.Factory.StartNew(() => PendingStatus.PendingTxnStatusCall(PendingStatusRequest, LoggingMsg));
+     }
+
+     return XElement.Parse(strAck);
+ }
