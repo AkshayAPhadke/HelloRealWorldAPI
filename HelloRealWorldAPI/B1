@@ -1,0 +1,244 @@
+public async Task PendingTxnStatusCall(PendingStatusRequest pendingStatusRequest, StringBuilder log)
+{
+    string strResponse = string.Empty;
+
+    try
+    {
+        log.Append($"{Environment.NewLine}BillerId:-{pendingStatusRequest.BillerID}");
+        strResponse = pendingStatusRequest.Response;
+
+        if (pendingStatusRequest.BillerID.ToUpper() == "BHAR00000NATR4") // BPCL Domastic
+        {
+            try
+            {
+                log.Append($"{Environment.NewLine}BillerToken  :{pendingStatusRequest.BillerToken}");
+                log.Append($"{Environment.NewLine}BPCL PAYSTATUS URL:{Configuration.BPCLPayStatusUrl} ");
+                {
+                    var BillerResponse = await GetStatusFromBiller(pendingStatusRequest, log, Configuration.BPCLPayStatusUrl);
+
+                    log.Append("BPCLPayStatusResponse  Response:" + BillerResponse.ToString() + Environment.NewLine);
+
+                    PayStatus Output = JsonConvert.DeserializeObject<PayStatus>(BillerResponse);
+                    string Status = Output.status_Code;
+                    log.Append("Status" + Status.ToString() + Environment.NewLine);
+
+                    if (Status == "200")
+                    {
+                        if (!string.IsNullOrEmpty(strResponse))
+                        {
+                            strResponse = await SentResponceToNPCI(pendingStatusRequest, log, strResponse);
+                        }
+                        else
+                        {
+                            log.Append(Environment.NewLine + "No Response for:" + strResponse + "TrnId:" + pendingStatusRequest.TrnId);
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _errlogger.Error($"BPCLPayStatus Exception: {ex.Message} {ex.StackTrace}Exception at{DateTime.Now.ToLongDateString()}");
+            }
+            _logger.Info(Environment.NewLine + ":Log " + log + "Response:" + strResponse);
+        }
+        else if (pendingStatusRequest.BillerID.ToUpper() == "BHAR00000NATB4") // BPCL Commercial
+        {
+            try
+            {
+                log.Append($"{Environment.NewLine}GetBillerToken Start :");
+                log.Append($"{Environment.NewLine}GetBillerToken End :{pendingStatusRequest.BillerToken}");
+                log.Append($"{Environment.NewLine}BPCL Commercial PAYSTATUS URL:{Configuration.BPCLCommercialPayStatusUrl} ");
+                {
+                    var BillerResponse = await GetStatusFromBillerBPCLComm(pendingStatusRequest, log, Configuration.BPCLCommercialPayStatusUrl);
+
+                    log.Append("BPCLCommercialPayStatus  Response:" + BillerResponse.ToString() + Environment.NewLine);
+
+                    PayStatus Output = JsonConvert.DeserializeObject<PayStatus>(BillerResponse);
+                    string Status = Output.status_Code;
+                    log.Append("Status" + Status.ToString() + Environment.NewLine);
+
+                    if (Status == "200")
+                    {
+                        if (!string.IsNullOrEmpty(strResponse))
+                        {
+                            strResponse = await SentResponceToNPCI(pendingStatusRequest, log, strResponse);
+                        }
+                        else
+                        {
+                            log.Append(Environment.NewLine + "No Response for:" + strResponse + "TrnId:" + pendingStatusRequest.TrnId);
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _errlogger.Error($"BPCLCommercialPayStatus Exception: {ex.Message} {ex.StackTrace}Exception at{DateTime.Now.ToLongDateString()}");
+            }
+            _logger.Info(Environment.NewLine + ":Log " + log + "Response:" + strResponse);
+        }
+        else if (pendingStatusRequest.BillerID.ToUpper() == "INDU00000NATL1") // IBL Credit Card
+        {
+            try
+            {
+                log.Append($"IBL Credit Card Request:{pendingStatusRequest.TxnStatusRequest} ");
+
+                IBLWebServiceSoap.BLWebServiceSoapBindingImplClient ser = new IBLWebServiceSoap.BLWebServiceSoapBindingImplClient(BLWebServiceSoapBindingImplClient.EndpointConfiguration.IBLWebServiceSoapBindingImpl);
+                var BillerResponse = await ser.executeServiceAsync(pendingStatusRequest.TxnStatusRequest);
+                string strProcessResponse = BillerResponse.Body.executeServiceReturn.ToString();
+                log.Append("IBL CC  Response:" + strProcessResponse.ToString() + Environment.NewLine);
+
+                XmlSerializer serializer = new XmlSerializer(typeof(IBLXML));
+                StringReader rdr = new StringReader(strProcessResponse);
+                var resultStatus = (IBLXML)serializer.Deserialize(rdr);
+
+                log.Append("Status" + resultStatus.Body.BBPSPAYResponse.Status + Environment.NewLine);
+
+                if (Configuration.IBLCCStatusCodesToProcess.Any(s => resultStatus.Body.BBPSPAYResponse.Status.StartsWith(s)))
+                {
+                    if (!string.IsNullOrEmpty(strResponse))
+                    {
+                        strResponse = await SentResponceToNPCI(pendingStatusRequest, log, strResponse);
+                    }
+                    else
+                    {
+                        log.Append(Environment.NewLine + "No Response for:" + strResponse + "TrnId:" + pendingStatusRequest.TrnId);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _errlogger.Error($"BPCLCommercialPayStatus Exception: {ex.Message} {ex.StackTrace}Exception at{DateTime.Now.ToLongDateString()}");
+            }
+            _logger.Info(Environment.NewLine + ":Log " + log + "Response:" + strResponse);
+        }
+        else
+        {
+            if (!String.IsNullOrEmpty(strResponse))
+            {
+                strResponse = await SentResponceToNPCI(pendingStatusRequest, log, strResponse);
+            }
+            else
+            {
+                _logger.Info(Environment.NewLine + "No Response for:" + strResponse + "TrnId:" + pendingStatusRequest.TrnId);
+            }
+            _logger.Info(Environment.NewLine + "Loginfo: " + log + " Response:" + strResponse + "TrnId:" + pendingStatusRequest.TrnId);
+        }
+    }
+    catch (Exception Ex)
+    {
+        _logger.Info(Environment.NewLine + "Loginfo: " + log + " Response:" + strResponse + "TrnId:" + pendingStatusRequest.TrnId);
+
+        _errlogger.Error("\nException PendingTxnStatusCall for RefId: " + pendingStatusRequest.RefId + " and BillerId " + pendingStatusRequest.BillerID + "" + DateTime.Now.ToString("dd/MM/yyyy HH:mm:ss"));
+        _errlogger.Error("\nMessage PendingTxnStatusCall Exception: " + Convert.ToString(Ex.Message) + "Exception at " + DateTime.Now.ToLongDateString());
+        _errlogger.Error("\nSource PendingTxnStatusCall Exception: " + Convert.ToString(Ex.Source) + "Exception at " + DateTime.Now.ToLongDateString());
+        _errlogger.Error("\nStackTrace PendingTxnStatusCall Exception: " + Convert.ToString(Ex.StackTrace) + "Exception at " + DateTime.Now.ToLongDateString());
+        _errlogger.Error(Environment.NewLine + "--------------------------------------------------------------");
+    }
+}
+private async Task<string> SentResponceToNPCI(PendingStatusRequest pendingStatusRequest, StringBuilder log, string strResponse)
+{
+    //Sign Response
+    XmlDocument XMLDoc = new XmlDocument();
+    XMLDoc.LoadXml(strResponse);
+    ClsCommon.SignStringXML(ref strResponse);
+
+    log.Append(Environment.NewLine + "Signed Biller Response:" + strResponse);
+
+    //SENDING RESPONSE TO NPCI 
+    var url = Configuration.BOUTxnStatusBBCU + pendingStatusRequest.RefId;
+
+    string strAck = await ClsCommon.ProcessSignedXML(strResponse, url);
+    log.Append(Environment.NewLine + "Ack Recieved From NPCI :" + strAck);
+    /*SENDING RESPONSE TO NPCI - END*/
+
+    //Log Ack and response to DB
+    await LogAckToDB(strAck, strResponse, pendingStatusRequest.TrnId);
+    return strResponse;
+}
+private async Task LogAckToDB(string strAck, string strResponse, string TrnsId)
+{
+    var _cmd = new SqlCommand("BBPS_USP_UpdateBOUPendingTxnStatusAck_V2");
+    _cmd.Parameters.AddWithValue("@ack", strAck);
+    _cmd.Parameters.AddWithValue("@i_Response", strResponse);
+    _cmd.Parameters.AddWithValue("@i_TrnsId", TrnsId);
+    var _dataAccess = new BBPSUtilities.DataManager();
+    await _dataAccess.fnSetResult(_cmd, CommandType.StoredProcedure, Configuration.BOUConnectionString, false, false, false, "");
+}
+private async Task<string> GetStatusFromBiller(PendingStatusRequest pendingStatusRequest, StringBuilder log, string StatusUrl)
+{
+    var HttpClient = httpClientFactory.CreateClient("Biller");
+    HttpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", pendingStatusRequest.BillerToken);
+    HttpClient.Timeout = TimeSpan.FromMilliseconds(Convert.ToInt32(Configuration.WebRequestTimeout));
+
+    var BPCLPayStatusRequestObj = new
+    {
+        npci_biller_id = pendingStatusRequest.BillerID,
+        Partner_Trans_ID = pendingStatusRequest.TxnRefId,
+        Dist_Ref_No = pendingStatusRequest.RefId,
+        LPG_ID = pendingStatusRequest.LpgId,
+        API_Req_No = pendingStatusRequest.MsgId,
+        addl1 = "",
+        addl2 = "",
+        addl3 = ""
+    };
+
+    var BPCLPayStatusRequest = JsonConvert.SerializeObject(BPCLPayStatusRequestObj);
+
+    HttpRequestMessage httpRequestMessage = new()
+    {
+        Method = HttpMethod.Post,
+        RequestUri = new Uri(StatusUrl),
+        Content = new StringContent(BPCLPayStatusRequest, Encoding.UTF8, MediaTypeNames.Application.Json)
+    };
+    var strResponse = await GetBillerResponse(HttpClient, httpRequestMessage, log);
+
+    return strResponse;
+}
+private async Task<string> GetStatusFromBillerBPCLComm(PendingStatusRequest pendingStatusRequest, StringBuilder log, string StatusUrl)
+{
+    var HttpClient = httpClientFactory.CreateClient("Biller");
+    HttpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", pendingStatusRequest.BillerToken);
+    HttpClient.Timeout = TimeSpan.FromMilliseconds(Convert.ToInt32(Configuration.WebRequestTimeout));
+
+    var BPCLPayStatusRequestObj = new
+    {
+        npci_biller_id = pendingStatusRequest.BillerID,
+        LPG_ID = pendingStatusRequest.LpgId,
+        API_Req_No = pendingStatusRequest.MsgId,
+        Partner_Trans_ID = pendingStatusRequest.TxnRefId,
+        Dist_Ref_No = pendingStatusRequest.RefId,
+        BPCL_Unique_ID = "",
+        addl1 = "",
+        addl2 = "",
+        addl3 = ""
+    };
+
+    var BPCLPayStatusRequest = JsonConvert.SerializeObject(BPCLPayStatusRequestObj);
+
+    log.Append($"{Environment.NewLine}BPCL Comm Pay Status Req :{BPCLPayStatusRequest}");
+
+    HttpRequestMessage httpRequestMessage = new()
+    {
+        Method = HttpMethod.Post,
+        RequestUri = new Uri(StatusUrl),
+        Content = new StringContent(BPCLPayStatusRequest, Encoding.UTF8, MediaTypeNames.Application.Json)
+    };
+    var strResponse = await GetBillerResponse(HttpClient, httpRequestMessage, log);
+
+    return strResponse;
+}
+private async Task<string> GetBillerResponse(HttpClient Client, HttpRequestMessage httpRequestMessage, StringBuilder log)
+{
+    string strProcessResponse;
+    log.Append($"Process Post Start Req :-  {DateTime.Now.ToString("dd/MM/yyyy HH:mm:ss")} {Environment.NewLine}");
+
+    var response = await Client.SendAsync(httpRequestMessage);
+
+    using (var reader = new StreamReader(await response.Content.ReadAsStreamAsync()))
+    {
+        strProcessResponse = reader.ReadToEnd();
+    }
+
+    log.Append($"Process Post End Req :-  {DateTime.Now.ToString("dd/MM/yyyy HH:mm:ss")} {Environment.NewLine}");
+    return strProcessResponse;
+}
